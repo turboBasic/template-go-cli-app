@@ -1,4 +1,4 @@
-module github.com/OWNER/PROJECT
+module github.com/turboBasic/template-go-cli-app
 
 go 1.27.3
 
