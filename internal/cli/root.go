@@ -44,7 +44,40 @@ func NewRootCommand(resources *app.ResourceService, version string) *cobra.Comma
 			return nil
 		},
 	}
+	status := &cobra.Command{
+		Use:   "status <name>",
+		Short: "Show a resource status",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resource, err := resources.Status(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status)
+			if err != nil {
+				return fmt.Errorf("write resource status: %w", err)
+			}
+			return nil
+		},
+	}
+	apply := &cobra.Command{
+		Use:   "apply <name>",
+		Short: "Apply a resource",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resource, err := resources.Apply(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status)
+			if err != nil {
+				return fmt.Errorf("write applied resource: %w", err)
+			}
+			return nil
+		},
+	}
 	resource.AddCommand(list)
+	resource.AddCommand(status, apply)
 	root.AddCommand(resource)
 	return root
 }

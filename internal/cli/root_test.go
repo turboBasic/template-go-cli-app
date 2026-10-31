@@ -44,3 +44,27 @@ func TestRootFeatures(t *testing.T) {
 		})
 	}
 }
+
+func TestResourceStatusAndApplyCommands(t *testing.T) {
+	for _, tc := range []struct {
+		args string
+		want string
+	}{
+		{args: "status example-2", want: "example-2: pending\n"},
+		{args: "apply example-2", want: "example-2: ready\n"},
+	} {
+		t.Run(tc.args, func(t *testing.T) {
+			command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), "test")
+			command.SetArgs(strings.Fields("resource " + tc.args))
+			command.SetIn(bytes.NewBuffer(nil))
+			var output bytes.Buffer
+			command.SetOut(&output)
+			if err := command.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if output.String() != tc.want {
+				t.Fatalf("output = %q, want %q", output.String(), tc.want)
+			}
+		})
+	}
+}
