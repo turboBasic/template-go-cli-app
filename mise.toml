@@ -27,3 +27,19 @@ run = "just test"
 
 [tasks.build]
 run = "just build"
+
+[tasks.init]
+description = "Initialize a generated project"
+usage = '''
+arg "[project_name]" help="Project display name"
+arg "[module_path]" help="Go module path"
+arg "[config_id]" help="Configuration and command identifier"
+'''
+run = '''
+#!/usr/bin/env bash
+args=()
+if [[ -n "${usage_project_name:-}" || -n "${usage_module_path:-}" || -n "${usage_config_id:-}" ]]; then
+  args=("${usage_project_name:-}" "${usage_module_path:-}" "${usage_config_id:-}")
+fi
+exec ./scripts/init.sh "${args[@]}"
+'''

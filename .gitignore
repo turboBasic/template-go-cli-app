@@ -12,6 +12,7 @@ coverage.out
 
 # Temporary files
 tmp/
+.init-tmp.*/
 
 # OS/editor files
 .DS_Store
