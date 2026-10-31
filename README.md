@@ -12,11 +12,19 @@ Create a repository with GitHub's **Use this template** button, then clone it an
 ```sh
 mise trust       # first time in a fresh clone
 mise install
+mise run init
 just build
 ```
 
-The starter command is `cmd/cli-app`. Rename it and update the Go module path when shaping your
-application.
+Initialization prompts for the project name, Go module path (including your GitHub account or
+organization), and configuration/command identifier. It updates the starter command, configuration
+paths and README title in the generated repository.
+
+For scripted setup, pass all three values in order:
+
+```sh
+mise run init "Example App" github.com/example/example-app example-app
+```
 
 ## Development
 
