@@ -103,15 +103,15 @@ stage_changes() {
     if [[ "$path" == "$repo_root/go.mod" ]]; then
       stage_module_path_replacement "$path" "$temporary_dir/$index"
     elif [[ "$path" == "$repo_root/README.md" ]]; then
-      sed -e 's|https://github.com/turboBasic/template-go-cli-app|TEMPLATE_REPO_URL|g' \
+      sed -e 's|https://github.com/turboBasic/template-go-cli-app|@TEMPLATE_REPO_URL@|g' \
         -e "1s|^# Go CLI App Template.*$|# $project_name|" \
         -e "s|cli-app|$config_id|g" \
-        -e 's|TEMPLATE_REPO_URL|https://github.com/turboBasic/template-go-cli-app|g' \
+        -e 's|@TEMPLATE_REPO_URL@|https://github.com/turboBasic/template-go-cli-app|g' \
         "$path" > "$temporary_dir/$index"
     elif [[ "$path" == "$repo_root/SECURITY.md" ]]; then
-      sed -e 's|https://github.com/turboBasic/template-go-cli-app|TEMPLATE_REPO_URL|g' \
+      sed -e 's|https://github.com/turboBasic/template-go-cli-app|@TEMPLATE_REPO_URL@|g' \
         -e "s|cli-app|$config_id|g" \
-        -e 's|TEMPLATE_REPO_URL|https://github.com/turboBasic/template-go-cli-app|g' \
+        -e 's|@TEMPLATE_REPO_URL@|https://github.com/turboBasic/template-go-cli-app|g' \
         "$path" > "$temporary_dir/$index"
     else
       sed "s|cli-app|$config_id|g" "$path" > "$temporary_dir/$index"
