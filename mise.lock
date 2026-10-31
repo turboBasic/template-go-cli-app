@@ -224,10 +224,10 @@ url = "https://github.com/casey/just/releases/download/1.59.0/just-1.59.0-x86_64
 url_api = "https://api.github.com/repos/casey/just/releases/assets/643131303"
 
 [[tools."npm:cspell-cli"]]
-version = "10.0.1"
-aube = { path = ".mise/locks/npm-cspell-cli/10.0.1", digest = "sha256:d9c7651a731e568d9f85ac9f9e5b75445b593413d5e9592d33ec59eb228e6c38" }
+version = "10.4.0"
+aube = { path = ".mise/locks/npm-cspell-cli/10.4.0", digest = "sha256:7c3ccd2d5c20c73a15cd1a899478fb85b1924024f63fa6b36c0d10df9e463a5a" }
 backend = "npm:cspell-cli"
-specifiers = ["10.0.1"]
+specifiers = ["10.4.0"]
 
 [[tools."npm:markdownlint-cli2"]]
 version = "0.23.2"
