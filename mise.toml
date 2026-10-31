@@ -1,0 +1,29 @@
+[settings]
+lockfile = true
+
+[shell_alias]
+cz = "command cz"
+
+[tools]
+"aqua:zizmorcore/zizmor" = "1.31.1"
+go = "1.27.3"
+golangci-lint = "2.15.0"
+jactionlint = { version = "2.4.0", workflow = "release.yaml" }
+just = "1.58.0"
+"npm:cspell-cli" = "10.0.1"
+"npm:markdownlint-cli2" = "0.23.2"
+"pipx:commitizen" = { version = "4.19.3", python = "3.14" }
+"pipx:yamllint" = { version = "1.38.0", python = "3.14" }
+prek = "0.5.2"
+shellcheck = "0.11.0"
+taplo = "0.10.0"
+uv = "0.13.6"
+
+[tasks.lint]
+run = "just lint"
+
+[tasks.test]
+run = "just test"
+
+[tasks.build]
+run = "just build"

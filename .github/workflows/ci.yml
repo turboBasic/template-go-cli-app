@@ -1,0 +1,20 @@
+name: 🌜 ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: turboBasic/github-actions/.github/workflows/project-ci.yml@v0.4
+    permissions:
+      contents: read
+    with:
+      run-typecheck: false

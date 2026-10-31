@@ -1,0 +1,27 @@
+name: Idea
+description: A change to the starter CLI or its development workflow
+title: "feat: "
+body:
+  - type: checkboxes
+    attributes:
+      label: Before filing
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+      description: >-
+        Search for a duplicate in the
+        [open and closed issues](https://github.com/turboBasic/template-go-cli-app/issues?q=is%3Aissue).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the use case and who benefits. Explain what is missing from the current template.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What change do you have in mind?
+      description: A rough outline is enough; include examples if they help explain the change.
+    validations:
+      required: false

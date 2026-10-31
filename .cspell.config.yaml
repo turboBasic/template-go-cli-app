@@ -1,0 +1,33 @@
+version: "0.2"
+language: en,en-GB
+caseSensitive: false
+enableGlobDot: true
+
+dictionaryDefinitions:
+  - name: project
+    path: .cspell/project.txt
+    description: Names and terminology specific to this repository
+    addWords: true
+
+dictionaries:
+  - project
+  - bash
+  - companies
+  - computing-acronyms
+  - en-common-misspellings
+  - filetypes
+  - git
+  - go
+  - softwareTerms
+  - software-tools
+
+ignorePaths:
+  - .git/**
+  - .cspell/**
+  - "**/go.mod"
+  - "**/go.sum"
+  - .env
+  - .env.*
+  - "**/*.pem"
+  - "**/*.key"
+  - mise.lock
