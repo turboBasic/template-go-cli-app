@@ -2,24 +2,75 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
-// NewRootCommand builds the command tree around the resource use cases.
-func NewRootCommand(resources *app.ResourceService) *cobra.Command {
+// BuildInfo is the version metadata embedded in the executable.
+type BuildInfo struct {
+	Version   string
+	Commit    string
+	BuildDate string
+}
+
+// NewRootCommand builds an independently configurable command tree.
+func NewRootCommand(resources *app.ResourceService, build BuildInfo, names []string) *cobra.Command {
+	names = append([]string(nil), names...)
 	root := &cobra.Command{
-		Use:          "cli-app",
-		Short:        "Manage simulated infrastructure resources",
-		SilenceUsage: true,
+		Use:     "cli-app",
+		Short:   "Manage simulated infrastructure resources",
+		Version: build.Version,
+		Annotations: map[string]string{
+			"commit":    build.Commit,
+			"buildDate": build.BuildDate,
+		},
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
-	resource := &cobra.Command{
-		Use:   "resource",
-		Short: "Manage resources",
+	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
+	var config, logLevel, output, color string
+	var quiet bool
+	flags := root.PersistentFlags()
+	flags.StringVar(&config, "config", "", "configuration file path")
+	flags.StringVar(&logLevel, "log-level", "warn", "logging level (debug, info, warn, error)")
+	flags.StringVar(&output, "output", "text", "result format (text, json)")
+	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
+	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
+	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		if !oneOf(logLevel, "debug", "info", "warn", "error") {
+			return fmt.Errorf("invalid --log-level %q: must be debug, info, warn, or error", logLevel)
+		}
+		if !oneOf(output, "text", "json") {
+			return fmt.Errorf("invalid --output %q: must be text or json", output)
+		}
+		if !oneOf(color, "auto", "always", "never") {
+			return fmt.Errorf("invalid --color %q: must be auto, always, or never", color)
+		}
+		if output == "json" && color == "always" {
+			return fmt.Errorf("--color always cannot be used with --output json")
+		}
+		return nil
 	}
-	list := &cobra.Command{
+	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
+	resource.AddCommand(newResourceListCommand(resources), newResourceStatusCommand(resources, names), newResourceApplyCommand(resources, names))
+	root.AddCommand(resource)
+	return root
+}
+
+func oneOf(value string, choices ...string) bool {
+	for _, choice := range choices {
+		if value == choice {
+			return true
+		}
+	}
+	return false
+}
+
+func newResourceListCommand(resources *app.ResourceService) *cobra.Command {
+	return &cobra.Command{
 		Use:   "list",
 		Short: "List resources",
 		Args:  cobra.NoArgs,
@@ -43,7 +94,71 @@ func NewRootCommand(resources *app.ResourceService) *cobra.Command {
 			return nil
 		},
 	}
-	resource.AddCommand(list)
-	root.AddCommand(resource)
-	return root
+}
+
+func newResourceStatusCommand(resources *app.ResourceService, names []string) *cobra.Command {
+	return &cobra.Command{
+		Use:               "status <name>",
+		Short:             "Show a resource status",
+		Args:              validateResourceName(names),
+		ValidArgsFunction: completeResourceNames(names),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resource, err := resources.Status(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status); err != nil {
+				return fmt.Errorf("write resource status: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+func newResourceApplyCommand(resources *app.ResourceService, names []string) *cobra.Command {
+	return &cobra.Command{
+		Use:               "apply <name>",
+		Short:             "Apply a resource",
+		Args:              validateResourceName(names),
+		ValidArgsFunction: completeResourceNames(names),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resource, err := resources.Apply(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status); err != nil {
+				return fmt.Errorf("write applied resource: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+func completeResourceNames(names []string) cobra.CompletionFunc {
+	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		var matches []string
+		for _, name := range names {
+			if strings.HasPrefix(name, toComplete) {
+				matches = append(matches, name)
+			}
+		}
+		return matches, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func validateResourceName(names []string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+			return err
+		}
+		for _, name := range names {
+			if args[0] == name {
+				return nil
+			}
+		}
+		return fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(names, ", "))
+	}
 }
