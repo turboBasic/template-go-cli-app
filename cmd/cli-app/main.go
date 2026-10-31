@@ -12,7 +12,7 @@ import (
 var version = "dev"
 
 func main() {
-	resources := memory.ResourceReader{}
+	resources := memory.NewResourceReader()
 	service := app.NewResourceService(resources)
 	command := cli.NewRootCommand(service, version)
 	if err := command.Execute(); err != nil {

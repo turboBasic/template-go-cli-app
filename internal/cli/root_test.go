@@ -10,7 +10,7 @@ import (
 )
 
 func TestResourceListCommand(t *testing.T) {
-	command := NewRootCommand(app.NewResourceService(memory.ResourceReader{}), "test")
+	command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), "test")
 	command.SetArgs([]string{"resource", "list"})
 	var output bytes.Buffer
 	command.SetOut(&output)
@@ -28,7 +28,7 @@ func TestResourceListCommand(t *testing.T) {
 func TestRootFeatures(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"--version"}, {"completion", "bash"}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
-			command := NewRootCommand(app.NewResourceService(memory.ResourceReader{}), "1.2.3")
+			command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), "1.2.3")
 			command.SetArgs(args)
 			var output bytes.Buffer
 			command.SetOut(&output)

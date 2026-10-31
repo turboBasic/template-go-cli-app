@@ -2,6 +2,8 @@ package domain
 
 import "errors"
 
+var ErrResourceNotFound = errors.New("resource not found")
+
 // Resource is a named infrastructure resource and its current status.
 type Resource struct {
 	Name   string

@@ -10,6 +10,32 @@ import (
 // ResourceReader supplies resources to application use cases.
 type ResourceReader interface {
 	List(context.Context) ([]domain.Resource, error)
+	Status(context.Context, string) (domain.Resource, error)
+	Apply(context.Context, string) (domain.Resource, error)
+}
+
+// Status returns the named resource and its current status.
+func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resource, error) {
+	resource, err := s.reader.Status(ctx, name)
+	if err != nil {
+		return domain.Resource{}, fmt.Errorf("get resource status: %w", err)
+	}
+	if err := resource.Validate(); err != nil {
+		return domain.Resource{}, fmt.Errorf("validate resource status: %w", err)
+	}
+	return resource, nil
+}
+
+// Apply applies the named resource and returns its updated state.
+func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resource, error) {
+	resource, err := s.reader.Apply(ctx, name)
+	if err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", err)
+	}
+	if err := resource.Validate(); err != nil {
+		return domain.Resource{}, fmt.Errorf("validate applied resource: %w", err)
+	}
+	return resource, nil
 }
 
 // ResourceService coordinates resource use cases.
