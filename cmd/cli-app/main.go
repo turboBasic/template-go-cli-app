@@ -9,10 +9,12 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
 )
 
+var version = "dev"
+
 func main() {
 	resources := memory.ResourceReader{}
 	service := app.NewResourceService(resources)
-	command := cli.NewRootCommand(service)
+	command := cli.NewRootCommand(service, version)
 	if err := command.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

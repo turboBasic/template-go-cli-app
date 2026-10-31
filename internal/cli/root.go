@@ -9,10 +9,11 @@ import (
 )
 
 // NewRootCommand builds the command tree around the resource use cases.
-func NewRootCommand(resources *app.ResourceService) *cobra.Command {
+func NewRootCommand(resources *app.ResourceService, version string) *cobra.Command {
 	root := &cobra.Command{
 		Use:          "cli-app",
 		Short:        "Manage simulated infrastructure resources",
+		Version:      version,
 		SilenceUsage: true,
 	}
 	resource := &cobra.Command{
