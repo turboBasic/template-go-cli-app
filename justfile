@@ -12,4 +12,5 @@ test:
     go test ./...
 
 build:
-    go build -o dist/cli-app ./...
+    @mkdir -p dist
+    go build -o dist/cli-app ./cmd/cli-app
