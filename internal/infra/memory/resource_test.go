@@ -23,6 +23,10 @@ func TestResourceReaderList(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("List() = %#v, want %#v", got, want)
 		}
+		wantNames := []string{"example-1", "example-2"}
+		if names := reader.Names(); !reflect.DeepEqual(names, wantNames) {
+			t.Fatalf("Names() = %#v, want %#v", names, wantNames)
+		}
 	}
 }
 

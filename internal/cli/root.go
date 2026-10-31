@@ -17,7 +17,8 @@ type BuildInfo struct {
 }
 
 // NewRootCommand builds an independently configurable command tree.
-func NewRootCommand(resources *app.ResourceService, build BuildInfo) *cobra.Command {
+func NewRootCommand(resources *app.ResourceService, build BuildInfo, names []string) *cobra.Command {
+	names = append([]string(nil), names...)
 	root := &cobra.Command{
 		Use:     "cli-app",
 		Short:   "Manage simulated infrastructure resources",
@@ -54,7 +55,7 @@ func NewRootCommand(resources *app.ResourceService, build BuildInfo) *cobra.Comm
 		return nil
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
-	resource.AddCommand(newResourceListCommand(resources), newResourceStatusCommand(resources), newResourceApplyCommand(resources))
+	resource.AddCommand(newResourceListCommand(resources), newResourceStatusCommand(resources, names), newResourceApplyCommand(resources, names))
 	root.AddCommand(resource)
 	return root
 }
@@ -95,12 +96,12 @@ func newResourceListCommand(resources *app.ResourceService) *cobra.Command {
 	}
 }
 
-func newResourceStatusCommand(resources *app.ResourceService) *cobra.Command {
+func newResourceStatusCommand(resources *app.ResourceService, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "status <name>",
 		Short:             "Show a resource status",
-		Args:              validateResourceName,
-		ValidArgsFunction: completeResourceNames,
+		Args:              validateResourceName(names),
+		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resource, err := resources.Status(cmd.Context(), args[0])
 			if err != nil {
@@ -114,12 +115,12 @@ func newResourceStatusCommand(resources *app.ResourceService) *cobra.Command {
 	}
 }
 
-func newResourceApplyCommand(resources *app.ResourceService) *cobra.Command {
+func newResourceApplyCommand(resources *app.ResourceService, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "apply <name>",
 		Short:             "Apply a resource",
-		Args:              validateResourceName,
-		ValidArgsFunction: completeResourceNames,
+		Args:              validateResourceName(names),
+		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resource, err := resources.Apply(cmd.Context(), args[0])
 			if err != nil {
@@ -133,31 +134,31 @@ func newResourceApplyCommand(resources *app.ResourceService) *cobra.Command {
 	}
 }
 
-func completeResourceNames(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) != 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	var matches []string
-	for _, name := range resourceNames() {
-		if strings.HasPrefix(name, toComplete) {
-			matches = append(matches, name)
+func completeResourceNames(names []string) cobra.CompletionFunc {
+	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+		var matches []string
+		for _, name := range names {
+			if strings.HasPrefix(name, toComplete) {
+				matches = append(matches, name)
+			}
+		}
+		return matches, cobra.ShellCompDirectiveNoFileComp
 	}
-	return matches, cobra.ShellCompDirectiveNoFileComp
 }
 
-func validateResourceName(cmd *cobra.Command, args []string) error {
-	if err := cobra.ExactArgs(1)(cmd, args); err != nil {
-		return err
-	}
-	for _, name := range resourceNames() {
-		if args[0] == name {
-			return nil
+func validateResourceName(names []string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+			return err
 		}
+		for _, name := range names {
+			if args[0] == name {
+				return nil
+			}
+		}
+		return fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(names, ", "))
 	}
-	return fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(resourceNames(), ", "))
-}
-
-func resourceNames() []string {
-	return []string{"example-1", "example-2"}
 }

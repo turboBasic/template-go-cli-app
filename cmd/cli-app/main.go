@@ -17,7 +17,7 @@ var buildDate = "unknown"
 func main() {
 	resources := memory.NewResourceReader()
 	service := app.NewResourceService(resources)
-	command := cli.NewRootCommand(service, buildInfo())
+	command := cli.NewRootCommand(service, buildInfo(), resources.Names())
 	if err := command.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

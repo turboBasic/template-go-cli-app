@@ -11,7 +11,7 @@ import (
 )
 
 func TestResourceListCommand(t *testing.T) {
-	command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+	command := newTestRootCommand()
 	command.SetArgs([]string{"resource", "list"})
 	var output bytes.Buffer
 	command.SetOut(&output)
@@ -29,7 +29,7 @@ func TestResourceListCommand(t *testing.T) {
 func TestRootFeatures(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"help", "resource", "status"}, {"--version"}, {"completion", "bash"}, {"completion", "zsh"}, {"completion", "fish"}, {"completion", "powershell"}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
-			command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+			command := newTestRootCommand()
 			command.SetArgs(args)
 			var output bytes.Buffer
 			command.SetOut(&output)
@@ -55,7 +55,7 @@ func TestResourceStatusAndApplyCommands(t *testing.T) {
 		{args: "apply example-2", want: "example-2: ready\n"},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
-			command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+			command := newTestRootCommand()
 			command.SetArgs(strings.Fields("resource " + tc.args))
 			command.SetIn(bytes.NewBuffer(nil))
 			var output bytes.Buffer
@@ -90,7 +90,7 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+			command := newTestRootCommand()
 			command.SetArgs(tc.args)
 			var output bytes.Buffer
 			command.SetOut(&output)
@@ -109,7 +109,7 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 }
 
 func TestResourceNameCompletion(t *testing.T) {
-	command := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+	command := newTestRootCommand()
 	status, _, err := command.Find([]string{"resource", "status"})
 	if err != nil {
 		t.Fatal(err)
@@ -121,8 +121,8 @@ func TestResourceNameCompletion(t *testing.T) {
 }
 
 func TestCommandTreesHaveIndependentFlags(t *testing.T) {
-	first := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
-	second := NewRootCommand(app.NewResourceService(memory.NewResourceReader()), testBuildInfo())
+	first := newTestRootCommand()
+	second := newTestRootCommand()
 	first.SetArgs([]string{"--output", "json", "resource", "list"})
 	first.SetOut(&bytes.Buffer{})
 	if err := first.Execute(); err != nil {
@@ -137,4 +137,9 @@ func TestCommandTreesHaveIndependentFlags(t *testing.T) {
 
 func testBuildInfo() BuildInfo {
 	return BuildInfo{Version: "1.2.3", Commit: "abc123", BuildDate: "test-build"}
+}
+
+func newTestRootCommand() *cobra.Command {
+	reader := memory.NewResourceReader()
+	return NewRootCommand(app.NewResourceService(reader), testBuildInfo(), reader.Names())
 }

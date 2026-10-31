@@ -22,6 +22,15 @@ func NewResourceReader() *ResourceReader {
 	}}
 }
 
+// Names returns the names available for local resource completion.
+func (r *ResourceReader) Names() []string {
+	names := make([]string, len(r.resources))
+	for i, resource := range r.resources {
+		names[i] = resource.Name
+	}
+	return names
+}
+
 // List returns the fixed resources used by the reference application.
 func (r *ResourceReader) List(ctx context.Context) ([]domain.Resource, error) {
 	if err := ctx.Err(); err != nil {
