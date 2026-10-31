@@ -1,0 +1,19 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go outputs
+/dist/
+*.test
+coverage.out
+
+# Temporary files
+tmp/
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

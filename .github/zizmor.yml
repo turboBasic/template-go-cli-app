@@ -1,0 +1,5 @@
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "turboBasic/github-actions/*": ref-pin

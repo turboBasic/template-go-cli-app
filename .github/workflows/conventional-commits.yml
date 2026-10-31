@@ -1,0 +1,19 @@
+name: 🌜 conventional-commits
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    uses: turboBasic/github-actions/.github/workflows/conventional-commits.yml@v0.4
+    permissions:
+      contents: read
+      pull-requests: read

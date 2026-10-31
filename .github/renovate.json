@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "enabledManagers": ["mise", "github-actions", "gomod"],
+  "schedule": ["every weekend"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "packageRules": [
+    {
+      "description": "Keep first-party reusable workflows on their moving compatibility refs.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["turboBasic/**"],
+      "enabled": false
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["every weekend"]
+  }
+}
