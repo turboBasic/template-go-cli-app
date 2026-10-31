@@ -10,7 +10,7 @@ go = "1.27.3"
 golangci-lint = "2.15.0"
 jactionlint = { version = "2.4.0", workflow = "release.yaml" }
 just = "1.59.0"
-"npm:cspell-cli" = "10.0.1"
+"npm:cspell-cli" = "10.4.0"
 "npm:markdownlint-cli2" = "0.23.2"
 "pipx:commitizen" = { version = "4.19.3", python = "3.14" }
 "pipx:yamllint" = { version = "1.38.0", python = "3.14" }
