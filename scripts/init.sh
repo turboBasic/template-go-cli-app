@@ -20,7 +20,7 @@ main() {
   validate_inputs
   validate_markers "$repo_root"
   temporary_dir="$(mktemp -d "$repo_root/.init-tmp.XXXXXX")"
-  trap "rm -rf -- $(printf '%q' "$temporary_dir")" EXIT
+  trap 'rm -rf -- "$temporary_dir"' EXIT
   stage_changes "$repo_root" "$temporary_dir"
   stage_go_sources "$repo_root" "$temporary_dir"
   install_changes

@@ -92,6 +92,14 @@ language = "system"
 files = '^\.github/workflows/.*\.ya?ml$'
 
 [[repos.hooks]]
+id = "shellcheck"
+name = "shellcheck"
+entry = "shellcheck"
+language = "system"
+files = '\.sh$'
+types = ["file"]
+
+[[repos.hooks]]
 id = "gofmt"
 name = "gofmt"
 entry = "gofmt -w"
