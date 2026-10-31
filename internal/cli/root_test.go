@@ -142,6 +142,7 @@ func TestCommandTreesHaveIndependentFlags(t *testing.T) {
 
 func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	setupConfigEnvironment(t)
+	t.Setenv("CLI_APP_COLOR", "never")
 	if err := os.Unsetenv("CLI_APP_OUTPUT"); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	want := config.Config{LogLevel: "debug", Output: "json", Color: "auto", Quiet: true}
+	want := config.Config{LogLevel: "debug", Output: "json", Color: "never", Quiet: true}
 	if got != want {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
 	}
