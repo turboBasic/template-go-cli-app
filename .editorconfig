@@ -12,6 +12,9 @@ trim_trailing_whitespace = true
 indent_style = tab
 tab_width = 4
 
+[*.sh]
+indent_size = 2
+
 [*.md]
 trim_trailing_whitespace = false
 
