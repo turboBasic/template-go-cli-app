@@ -20,7 +20,15 @@ func Load(files ConfigFiles, flags map[string]FlagValue) (LoadResult, error) {
 }
 
 func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (LoadResult, error) {
-	result, err := mergeFiles(files)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return LoadResult{}, fmt.Errorf("find working directory: %w", err)
+	}
+	return loadWithSchema(files, environment, flags, productionSchema(), workingDir)
+}
+
+func loadWithSchema(files ConfigFiles, environment []string, flags map[string]FlagValue, schema map[string]valueType, workingDir string) (LoadResult, error) {
+	result, err := mergeFilesWithSchema(files, schema)
 	if err != nil {
 		return LoadResult{}, err
 	}
@@ -30,7 +38,7 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (
 			continue
 		}
 		key := strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
-		parsed, known, err := parseOverlayValue(key, value)
+		parsed, known, err := parseOverlayValue(key, value, schema)
 		if !known {
 			continue
 		}
@@ -43,7 +51,7 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (
 		if !flag.Changed {
 			continue
 		}
-		parsed, known, err := parseFlagValue(key, flag.Value)
+		parsed, known, err := parseFlagValue(key, flag.Value, schema)
 		if !known {
 			continue
 		}
@@ -52,6 +60,9 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (
 		}
 		mergeLayer(result.values, map[string]any{key: parsed}, Source(flagSource(key, flag)), result.Sources)
 	}
+	if err := resolvePaths(result.values, result.Sources, workingDir, schema); err != nil {
+		return LoadResult{}, err
+	}
 	result.Config, err = decodeConfig(result.values)
 	if err != nil {
 		return LoadResult{}, fmt.Errorf("decode effective configuration: %w", err)
@@ -59,11 +70,15 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (
 	return result, nil
 }
 
-func parseOverlayValue(key, value string) (any, bool, error) {
-	switch key {
-	case "log-level", "output", "color":
+func parseOverlayValue(key, value string, schema map[string]valueType) (any, bool, error) {
+	kind, known := schema[key]
+	if !known {
+		return nil, false, nil
+	}
+	switch kind {
+	case stringValue, pathValue:
 		return value, true, nil
-	case "quiet":
+	case booleanValue:
 		parsed, err := strconv.ParseBool(value)
 		if err != nil {
 			return nil, true, fmt.Errorf("invalid boolean %q", value)
@@ -74,15 +89,19 @@ func parseOverlayValue(key, value string) (any, bool, error) {
 	}
 }
 
-func parseFlagValue(key string, value any) (any, bool, error) {
-	switch key {
-	case "log-level", "output", "color":
+func parseFlagValue(key string, value any, schema map[string]valueType) (any, bool, error) {
+	kind, known := schema[key]
+	if !known {
+		return nil, false, nil
+	}
+	switch kind {
+	case stringValue, pathValue:
 		parsed, ok := value.(string)
 		if !ok {
 			return nil, true, fmt.Errorf("expected string, got %T", value)
 		}
 		return parsed, true, nil
-	case "quiet":
+	case booleanValue:
 		parsed, ok := value.(bool)
 		if !ok {
 			return nil, true, fmt.Errorf("expected boolean, got %T", value)

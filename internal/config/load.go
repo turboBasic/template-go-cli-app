@@ -32,6 +32,10 @@ func LoadFiles(files ConfigFiles) (LoadResult, error) {
 }
 
 func mergeFiles(files ConfigFiles) (LoadResult, error) {
+	return mergeFilesWithSchema(files, productionSchema())
+}
+
+func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadResult, error) {
 	values := defaultValues()
 	sources := make(map[string]Source, len(values))
 	for key := range values {
@@ -45,7 +49,7 @@ func mergeFiles(files ConfigFiles) (LoadResult, error) {
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read configuration %s: %w", path, err)
 		}
-		layer, err := decodeTOMLValues(path, data)
+		layer, err := decodeTOMLWithSchema(path, data, schema)
 		if err != nil {
 			return LoadResult{}, err
 		}
