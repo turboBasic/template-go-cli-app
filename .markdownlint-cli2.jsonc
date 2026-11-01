@@ -23,6 +23,15 @@
         "MD041": false
       },
       "combine": "merge"
+    },
+    {
+      "filter": [
+        "README.md"
+      ],
+      "config": {
+        "MD033": false
+      },
+      "combine": "merge"
     }
   ]
 }

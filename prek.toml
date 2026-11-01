@@ -17,6 +17,7 @@ id = "end-of-file-fixer"
 
 [[repos.hooks]]
 id = "check-added-large-files"
+exclude = '^assets/logo\.png$'
 
 [[repos.hooks]]
 id = "check-merge-conflict"
