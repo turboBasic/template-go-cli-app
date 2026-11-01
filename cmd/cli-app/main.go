@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"syscall"
 
@@ -28,10 +29,13 @@ var (
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
-		return app.NewResourceService(resources, logger), nil
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(resources, logger), nil, nil
 	}, buildInfo(), resources.Names())
-	os.Exit(execute(func() error { return runCommand(command) }, os.Stderr))
+	os.Exit(executeWithSignals(func(ctx context.Context) error {
+		command.SetContext(ctx)
+		return runCommand(command)
+	}, os.Stderr))
 }
 
 func runCommand(command *cobra.Command) error {
@@ -48,6 +52,36 @@ func execute(run func() error, stderr io.Writer) int {
 		return exitCode(err)
 	}
 	return 0
+}
+
+func executeWithSignals(run func(context.Context) error, stderr io.Writer) int {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(context.Canceled)
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	result := make(chan int, 1)
+	go func() {
+		result <- execute(func() error {
+			err := run(ctx)
+			if cause := context.Cause(ctx); cause != nil {
+				err = errors.Join(err, cause)
+			}
+			return err
+		}, stderr)
+	}()
+	select {
+	case code := <-result:
+		return code
+	case first := <-signals:
+		cancel(signalCause(first))
+		select {
+		case code := <-result:
+			return code
+		case second := <-signals:
+			return exitCode(signalCause(second))
+		}
+	}
 }
 
 func exitCode(err error) int {

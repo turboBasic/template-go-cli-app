@@ -18,8 +18,8 @@ import (
 
 const configID = "cli-app"
 
-// ResourceFactory builds the command's application service from effective configuration.
-type ResourceFactory func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error)
+// ResourceFactory builds the command's application service and its dependency cleanup.
+type ResourceFactory func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error)
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -30,8 +30,8 @@ type BuildInfo struct {
 
 // NewRootCommand builds an independently configurable command tree.
 func NewRootCommand(reader app.ResourceReader, build BuildInfo, names []string) *cobra.Command {
-	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
-		return app.NewResourceService(reader, logger), nil
+	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger), nil, nil
 	}, build, names)
 }
 
@@ -67,25 +67,43 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	var renderer output.Renderer
 	var logResult logging.Result
 	var cancelOperation context.CancelFunc
-	closeLogger := func() error {
+	var cleanupDependencies func(context.Context) error
+	cleanupTimeout := config.Defaults().Timeouts.Cleanup
+	var cleanupComplete bool
+	cleanup := func(parentContext context.Context) error {
+		if cleanupComplete {
+			return nil
+		}
+		cleanupComplete = true
 		if cancelOperation != nil {
 			cancelOperation()
 			cancelOperation = nil
 		}
-		if logResult.Close == nil {
-			return nil
+		var dependencyErr error
+		if cleanupDependencies != nil {
+			cleanupContext, cancel := context.WithTimeout(context.WithoutCancel(parentContext), cleanupTimeout)
+			dependencyErr = cleanupDependencies(cleanupContext)
+			cancel()
+			cleanupDependencies = nil
+			if dependencyErr != nil {
+				dependencyErr = fmt.Errorf("cleanup application dependencies: %w", dependencyErr)
+			}
 		}
-		close := logResult.Close
-		logResult.Close = nil
-		if err := close(); err != nil {
-			return fmt.Errorf("close logger: %w", err)
+		var loggerErr error
+		if logResult.Close != nil {
+			close := logResult.Close
+			logResult.Close = nil
+			if err := close(); err != nil {
+				loggerErr = fmt.Errorf("close logger: %w", err)
+			}
 		}
-		return nil
+		return errors.Join(dependencyErr, loggerErr)
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		if err := closeLogger(); err != nil {
+		if err := cleanup(cmd.Context()); err != nil {
 			return err
 		}
+		cleanupComplete = false
 		resources = nil
 		renderer = output.Renderer{}
 		if isHelpOrCompletion(cmd) {
@@ -113,6 +131,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
 		}
+		cleanupTimeout = loaded.Config.Timeouts.Cleanup
 		_, noColor := os.LookupEnv("NO_COLOR")
 		renderer = output.Renderer{
 			Writer: cmd.OutOrStdout(),
@@ -137,19 +156,19 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			}
 		}
 		if factory == nil {
-			return errors.Join(fmt.Errorf("resource factory is required"), closeLogger())
+			return errors.Join(fmt.Errorf("resource factory is required"), cleanup(cmd.Context()))
 		}
-		resources, err = factory(cmd.Context(), loaded.Config, logResult.Logger)
+		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, logResult.Logger)
 		if err != nil {
-			return errors.Join(fmt.Errorf("create application dependencies: %w", err), closeLogger())
+			return errors.Join(fmt.Errorf("create application dependencies: %w", err), cleanup(cmd.Context()))
 		}
 		if resources == nil {
-			return errors.Join(fmt.Errorf("resource factory returned no service"), closeLogger())
+			return errors.Join(fmt.Errorf("resource factory returned no service"), cleanup(cmd.Context()))
 		}
 		return nil
 	}
-	root.PersistentPostRunE = func(*cobra.Command, []string) error {
-		return closeLogger()
+	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+		return cleanup(cmd.Context())
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
 	getResources := func() *app.ResourceService { return resources }
@@ -157,9 +176,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	list := newResourceListCommand(getResources, getRenderer)
 	status := newResourceStatusCommand(getResources, getRenderer, names)
 	apply := newResourceApplyCommand(getResources, getRenderer, names)
-	closeAfterRun(list, closeLogger)
-	closeAfterRun(status, closeLogger)
-	closeAfterRun(apply, closeLogger)
+	closeAfterRun(list, cleanup)
+	closeAfterRun(status, cleanup)
+	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource)
 	return root
@@ -181,10 +200,10 @@ func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeou
 	}
 }
 
-func closeAfterRun(command *cobra.Command, closeLogger func() error) {
+func closeAfterRun(command *cobra.Command, cleanup func(context.Context) error) {
 	run := command.RunE
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		return errors.Join(run(cmd, args), closeLogger())
+		return errors.Join(run(cmd, args), cleanup(cmd.Context()))
 	}
 }
 
