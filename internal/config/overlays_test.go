@@ -91,6 +91,22 @@ func TestLoadOperationTimeoutEnvironment(t *testing.T) {
 	}
 }
 
+func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
+	got, err := load(ConfigFiles{}, []string{
+		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_ATTEMPTS=4",
+		"CLI_APP_RETRY_RESOURCE_STATUS_INITIAL_DELAY=25ms",
+		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_DELAY=2s",
+		"CLI_APP_RETRY_RESOURCE_STATUS_JITTER=0.3",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
+	if got.Config.Retry.Resource.Status == nil || *got.Config.Retry.Resource.Status != *want {
+		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Resource.Status, want)
+	}
+}
+
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {

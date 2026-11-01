@@ -53,6 +53,10 @@ func validateValues(source string, values map[string]any, schema map[string]valu
 		switch kind {
 		case stringValue, pathValue, durationValue:
 			_, valid = value.(string)
+		case integerValue:
+			_, valid = value.(int64)
+		case floatValue:
+			_, valid = value.(float64)
 		case booleanValue:
 			_, valid = value.(bool)
 		default:
@@ -71,6 +75,8 @@ func decodeConfig(values map[string]any) (Config, error) {
 		"timeouts.resource.list",
 		"timeouts.resource.status",
 		"timeouts.resource.apply",
+		"retry.resource.status.initial_delay",
+		"retry.resource.status.max_delay",
 	} {
 		if err := decodeDuration(values, key); err != nil {
 			return Config{}, err

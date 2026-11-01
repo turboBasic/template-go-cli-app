@@ -10,12 +10,14 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
+	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
 var version = "dev"
@@ -29,8 +31,22 @@ var (
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(resources, logger), nil, nil
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		var reader app.ResourceReader = resources
+		if configured := effective.Retry.Resource.Status; configured != nil {
+			policy := &retry.Policy{
+				MaxAttempts:  configured.MaxAttempts,
+				InitialDelay: configured.InitialDelay,
+				MaxDelay:     configured.MaxDelay,
+				Jitter:       configured.Jitter,
+			}
+			retryingReader, err := retry.NewResourceReader(reader, policy, retry.RealClock{}, retry.NewRandomSource(time.Now().UnixNano()))
+			if err != nil {
+				return nil, nil, fmt.Errorf("configure status retries: %w", err)
+			}
+			reader = retryingReader
+		}
+		return app.NewResourceService(reader, logger), nil, nil
 	}, buildInfo(), resources.Names())
 	os.Exit(executeWithSignals(func(ctx context.Context) error {
 		command.SetContext(ctx)

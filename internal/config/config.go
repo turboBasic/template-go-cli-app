@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -13,6 +14,25 @@ type Config struct {
 	Color    string        `koanf:"color"`
 	Quiet    bool          `koanf:"quiet"`
 	Timeouts TimeoutConfig `koanf:"timeouts"`
+	Retry    RetryConfig   `koanf:"retry"`
+}
+
+// RetryConfig holds opt-in policies for individually approved operations.
+type RetryConfig struct {
+	Resource ResourceRetryConfig `koanf:"resource"`
+}
+
+// ResourceRetryConfig holds retry policies for resource operations.
+type ResourceRetryConfig struct {
+	Status *RetryPolicyConfig `koanf:"status"`
+}
+
+// RetryPolicyConfig is a bounded retry policy for one configured operation.
+type RetryPolicyConfig struct {
+	MaxAttempts  int           `koanf:"max_attempts"`
+	InitialDelay time.Duration `koanf:"initial_delay"`
+	MaxDelay     time.Duration `koanf:"max_delay"`
+	Jitter       float64       `koanf:"jitter"`
 }
 
 // TimeoutConfig defines per-operation timeouts and the dependency cleanup bound.
@@ -83,6 +103,18 @@ func (c Config) Validate() error {
 	} {
 		if setting.timeout != nil && *setting.timeout <= 0 {
 			return fmt.Errorf("invalid %s %s: must be positive", setting.key, *setting.timeout)
+		}
+	}
+	if c.Retry.Resource.Status != nil {
+		policy := c.Retry.Resource.Status
+		if policy.MaxAttempts < 1 {
+			return fmt.Errorf("invalid retry.resource.status.max_attempts: must be positive")
+		}
+		if policy.InitialDelay < 0 || policy.MaxDelay < 0 || (policy.MaxAttempts > 1 && (policy.InitialDelay == 0 || policy.MaxDelay < policy.InitialDelay)) {
+			return fmt.Errorf("invalid retry.resource.status delays: require 0 < initial <= max for multiple attempts")
+		}
+		if math.IsNaN(policy.Jitter) || policy.Jitter < 0 || policy.Jitter > 1 {
+			return fmt.Errorf("invalid retry.resource.status.jitter: must be between 0 and 1")
 		}
 	}
 	return nil
