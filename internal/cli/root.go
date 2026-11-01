@@ -48,6 +48,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return app.Classify(app.ErrValidation, err)
+	})
 	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
 	var configPath, logLevel, outputFormat, color string
 	var quiet bool
@@ -86,7 +89,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		}
 		files, err := config.DiscoverFiles(workingDir, configID, configPath)
 		if err != nil {
-			return err
+			return app.Classify(app.ErrValidation, err)
 		}
 		flagValues := map[string]config.FlagValue{
 			"log-level": {Value: logLevel, Changed: flags.Lookup("log-level").Changed, Source: "--log-level"},
@@ -96,7 +99,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
-			return err
+			return app.Classify(app.ErrValidation, err)
 		}
 		_, noColor := os.LookupEnv("NO_COLOR")
 		renderer = output.Renderer{
@@ -222,13 +225,13 @@ func completeResourceNames(names []string) cobra.CompletionFunc {
 func validateResourceName(names []string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
-			return err
+			return app.Classify(app.ErrValidation, err)
 		}
 		for _, name := range names {
 			if args[0] == name {
 				return nil
 			}
 		}
-		return fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(names, ", "))
+		return app.Classify(app.ErrValidation, fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(names, ", ")))
 	}
 }

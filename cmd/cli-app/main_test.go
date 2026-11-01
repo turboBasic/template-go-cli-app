@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -66,6 +68,27 @@ func TestExecuteReportsOutputFailureToStderrAndReturnsFailureCode(t *testing.T) 
 	}
 	if !strings.Contains(stderr.String(), "injected output failure") {
 		t.Fatalf("stderr = %q, want output failure", stderr.String())
+	}
+}
+
+func TestExitCode(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "validation", err: app.Classify(app.ErrValidation, errors.New("invalid input")), want: 2},
+		{name: "timeout category", err: app.Classify(app.ErrTimeout, errors.New("operation timed out")), want: 124},
+		{name: "deadline", err: context.DeadlineExceeded, want: 124},
+		{name: "interrupt", err: fmt.Errorf("command: %w", signalCause(os.Interrupt)), want: 130},
+		{name: "termination", err: fmt.Errorf("command: %w", signalCause(syscall.SIGTERM)), want: 143},
+		{name: "other", err: errors.New("operation failed"), want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := exitCode(test.err); got != test.want {
+				t.Fatalf("exitCode(%v) = %d, want %d", test.err, got, test.want)
+			}
+		})
 	}
 }
 

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"runtime/debug"
+	"syscall"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
@@ -17,6 +19,11 @@ import (
 var version = "dev"
 var commit = "unknown"
 var buildDate = "unknown"
+
+var (
+	errInterruptSignal = errors.New("interrupted by SIGINT")
+	errTerminateSignal = errors.New("terminated by SIGTERM")
+)
 
 func main() {
 	resources := memory.NewResourceReader()
@@ -29,9 +36,35 @@ func main() {
 func execute(run func() error, stderr io.Writer) int {
 	if err := run(); err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
-		return 1
+		return exitCode(err)
 	}
 	return 0
+}
+
+func exitCode(err error) int {
+	switch {
+	case errors.Is(err, errInterruptSignal):
+		return 130
+	case errors.Is(err, errTerminateSignal):
+		return 143
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, app.ErrTimeout):
+		return 124
+	case errors.Is(err, app.ErrValidation):
+		return 2
+	default:
+		return 1
+	}
+}
+
+func signalCause(signal os.Signal) error {
+	switch signal {
+	case os.Interrupt:
+		return errInterruptSignal
+	case syscall.SIGTERM:
+		return errTerminateSignal
+	default:
+		return fmt.Errorf("unexpected termination signal %s", signal)
+	}
 }
 
 func buildInfo() cli.BuildInfo {
