@@ -11,6 +11,12 @@ fmt:
 test:
     go test ./...
 
+test-race:
+    go test -race ./...
+
+coverage:
+    go test -cover ./...
+
 build:
     @mkdir -p dist
     go build -o dist/cli-app ./cmd/cli-app

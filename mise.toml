@@ -25,6 +25,12 @@ run = "just lint"
 [tasks.test]
 run = "just test"
 
+[tasks.test-race]
+run = "just test-race"
+
+[tasks.coverage]
+run = "just coverage"
+
 [tasks.build]
 run = "just build"
 
