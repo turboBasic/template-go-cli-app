@@ -61,7 +61,7 @@ func TestExecuteReportsOutputFailureToStderrAndReturnsFailureCode(t *testing.T) 
 	}
 	reader := memory.NewResourceReader()
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"--config", configPath, "--output", "json", "resource", "list"})
 	command.SetOut(failingWriter{err: errors.New("injected output failure")})
@@ -108,7 +108,7 @@ func TestSignalHelperProcess(t *testing.T) {
 	resources := memory.NewResourceReader()
 	reader := signalBlockingReader{ResourceReader: resources}
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), func(ctx context.Context) error {
+		return app.NewResourceService(reader, logger, nil), func(ctx context.Context) error {
 			_, _ = fmt.Fprintln(os.Stdout, "cleanup started")
 			if os.Getenv("CLI_APP_SIGNAL_HELPER_BLOCK_CLEANUP") == "1" {
 				<-ctx.Done()

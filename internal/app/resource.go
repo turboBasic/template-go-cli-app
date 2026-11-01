@@ -31,25 +31,50 @@ func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resou
 // Apply applies the named resource and returns its updated state.
 func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resource, error) {
 	s.logger.DebugContext(ctx, "applying resource")
+	if err := ctx.Err(); err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
+	s.reportProgress(ProgressEvent{Phase: "validating", Message: "Validating resource"})
+	if err := ctx.Err(); err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
+	s.reportProgress(ProgressEvent{Phase: "applying", Message: "Applying resource"})
+	if err := ctx.Err(); err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
 	resource, err := s.reader.Apply(ctx, name)
 	if err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
+	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
 	if err := resource.Validate(); err != nil {
 		return domain.Resource{}, fmt.Errorf("validate applied resource: %w", Classify(ErrValidation, err))
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
+	s.reportProgress(ProgressEvent{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"})
 	return resource, nil
+}
+
+func (s *ResourceService) reportProgress(event ProgressEvent) {
+	if s.progressReporter != nil {
+		s.progressReporter.Report(event)
+	}
 }
 
 // ResourceService coordinates resource use cases.
 type ResourceService struct {
-	reader ResourceReader
-	logger *slog.Logger
+	reader           ResourceReader
+	logger           *slog.Logger
+	progressReporter ProgressReporter
 }
 
-// NewResourceService constructs a resource service with its required reader and logger.
-func NewResourceService(reader ResourceReader, logger *slog.Logger) *ResourceService {
-	return &ResourceService{reader: reader, logger: logger}
+// NewResourceService constructs a resource service with its required dependencies.
+func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter) *ResourceService {
+	return &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter}
 }
 
 // List returns the resources supplied by the configured reader.

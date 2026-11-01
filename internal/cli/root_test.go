@@ -201,7 +201,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		factoryCalls++
 		got = effective
 		gotLogger = logger
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list", "--timeout", "2m"})
 	var output bytes.Buffer
@@ -245,7 +245,7 @@ func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 		deadlines:      make(chan time.Time, 1),
 	}
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -291,7 +291,7 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 				if test.setupFailure {
 					return nil, cleanup, errors.New("injected setup failure")
 				}
-				return app.NewResourceService(reader, logger), cleanup, nil
+				return app.NewResourceService(reader, logger, nil), cleanup, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"resource", "list"})
 			command.SetOut(&bytes.Buffer{})
@@ -332,7 +332,7 @@ func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *t
 	cleanupContext := make(chan cleanupContextState, 1)
 	cleanupCalls := 0
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), func(ctx context.Context) error {
+		return app.NewResourceService(reader, logger, nil), func(ctx context.Context) error {
 			cleanupCalls++
 			deadline, bounded := ctx.Deadline()
 			cleanupContext <- cleanupContextState{err: ctx.Err(), deadline: deadline, bounded: bounded}
@@ -388,7 +388,7 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	reader := memory.NewResourceReader()
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "resource", "list"})
 	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "open log file") {
@@ -409,7 +409,7 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	os.Stderr = writer
 	commandReader := memory.NewResourceReader()
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(commandReader, logger), nil, nil
+		return app.NewResourceService(commandReader, logger, nil), nil, nil
 	}, testBuildInfo(), commandReader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
 	var stdout bytes.Buffer
@@ -488,7 +488,7 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 				reader = failingResourceReader{}
 			}
 			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-				return app.NewResourceService(reader, logger), nil, nil
+				return app.NewResourceService(reader, logger, nil), nil, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"--config", configPath, "resource", "list"})
 			command.SetOut(&bytes.Buffer{})
@@ -605,7 +605,7 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	var configs []config.Config
 	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 		configs = append(configs, effective)
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
 		command.SetArgs([]string{"--config", path, "resource", "list"})

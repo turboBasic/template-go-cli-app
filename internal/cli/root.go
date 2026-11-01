@@ -31,7 +31,7 @@ type BuildInfo struct {
 // NewRootCommand builds an independently configurable command tree.
 func NewRootCommand(reader app.ResourceReader, build BuildInfo, names []string) *cobra.Command {
 	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, nil), nil, nil
 	}, build, names)
 }
 
