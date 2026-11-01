@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -53,6 +54,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	})
 	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
 	var configPath, logLevel, outputFormat, color string
+	var timeoutOverride time.Duration
 	var quiet bool
 	flags := root.PersistentFlags()
 	flags.StringVar(&configPath, "config", "", "configuration file path")
@@ -60,6 +62,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
 	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
+	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected resource operation")
 	var resources *app.ResourceService
 	var renderer output.Renderer
 	var logResult logging.Result
@@ -96,6 +99,10 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"output":    {Value: outputFormat, Changed: flags.Lookup("output").Changed, Source: "--output"},
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
+		}
+		if cmd.Parent() != nil && cmd.Parent().Name() == "resource" && flags.Lookup("timeout").Changed {
+			key := "timeouts.resource." + cmd.Name()
+			flagValues[key] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {

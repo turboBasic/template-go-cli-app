@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDefaults(t *testing.T) {
@@ -11,8 +12,38 @@ func TestDefaults(t *testing.T) {
 		Log:      LogConfig{Console: ConsoleLogConfig{Level: "warn"}, File: FileLogConfig{Level: "debug"}},
 		Output:   "text",
 		Color:    "auto",
+		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
 	}); got != want {
 		t.Fatalf("Defaults() = %+v, want %+v", got, want)
+	}
+}
+
+func durationPtr(value time.Duration) *time.Duration { return &value }
+
+func TestTimeoutDefaultsAndValidation(t *testing.T) {
+	defaults := Defaults()
+	if defaults.Timeouts.Cleanup != 5*time.Second {
+		t.Fatalf("cleanup timeout = %s, want 5s", defaults.Timeouts.Cleanup)
+	}
+	if defaults.Timeouts.Resource.List != nil || defaults.Timeouts.Resource.Status != nil || defaults.Timeouts.Resource.Apply != nil {
+		t.Fatalf("operation timeouts = %+v, want disabled defaults", defaults.Timeouts.Resource)
+	}
+	for _, test := range []struct {
+		name string
+		edit func(*Config)
+	}{
+		{name: "zero operation timeout", edit: func(c *Config) { timeout := time.Duration(0); c.Timeouts.Resource.List = &timeout }},
+		{name: "negative operation timeout", edit: func(c *Config) { timeout := -time.Second; c.Timeouts.Resource.Apply = &timeout }},
+		{name: "zero cleanup timeout", edit: func(c *Config) { c.Timeouts.Cleanup = 0 }},
+		{name: "negative cleanup timeout", edit: func(c *Config) { c.Timeouts.Cleanup = -time.Second }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := Defaults()
+			test.edit(&config)
+			if err := config.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want non-positive timeout error")
+			}
+		})
 	}
 }
 

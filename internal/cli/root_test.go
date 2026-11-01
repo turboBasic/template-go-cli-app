@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -201,7 +203,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		gotLogger = logger
 		return app.NewResourceService(reader, logger), nil
 	}, testBuildInfo(), reader.Names())
-	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list", "--timeout", "2m"})
 	var output bytes.Buffer
 	command.SetOut(&output)
 
@@ -214,8 +216,9 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
+		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Resource: config.ResourceTimeouts{List: durationPointer(2 * time.Minute)}},
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
 	}
 	if factoryCalls != 1 {
@@ -229,6 +232,8 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal("factory logger = nil, want initialized logger")
 	}
 }
+
+func durationPointer(duration time.Duration) *time.Duration { return &duration }
 
 func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	setupConfigEnvironment(t)

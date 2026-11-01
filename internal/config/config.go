@@ -1,14 +1,31 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Config contains the supported Stage 1 application settings.
 type Config struct {
-	LogLevel string    `koanf:"-"` // Deprecated: use Log.Console.Level.
-	Log      LogConfig `koanf:"log"`
-	Output   string    `koanf:"output"`
-	Color    string    `koanf:"color"`
-	Quiet    bool      `koanf:"quiet"`
+	LogLevel string        `koanf:"-"` // Deprecated: use Log.Console.Level.
+	Log      LogConfig     `koanf:"log"`
+	Output   string        `koanf:"output"`
+	Color    string        `koanf:"color"`
+	Quiet    bool          `koanf:"quiet"`
+	Timeouts TimeoutConfig `koanf:"timeouts"`
+}
+
+// TimeoutConfig defines per-operation timeouts and the dependency cleanup bound.
+type TimeoutConfig struct {
+	Cleanup  time.Duration    `koanf:"cleanup"`
+	Resource ResourceTimeouts `koanf:"resource"`
+}
+
+// ResourceTimeouts configures timeouts for resource use cases.
+type ResourceTimeouts struct {
+	List   *time.Duration `koanf:"list"`
+	Status *time.Duration `koanf:"status"`
+	Apply  *time.Duration `koanf:"apply"`
 }
 
 // LogConfig contains the settings for local log destinations.
@@ -35,6 +52,7 @@ func Defaults() Config {
 		Log:      LogConfig{Console: ConsoleLogConfig{Level: "warn"}, File: FileLogConfig{Level: "debug"}},
 		Output:   "text",
 		Color:    "auto",
+		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
 	}
 }
 
@@ -51,6 +69,21 @@ func (c Config) Validate() error {
 	}
 	if !oneOf(c.Color, "auto", "always", "never") {
 		return fmt.Errorf("invalid color %q: must be auto, always, or never", c.Color)
+	}
+	if c.Timeouts.Cleanup <= 0 {
+		return fmt.Errorf("invalid timeouts.cleanup %s: must be positive", c.Timeouts.Cleanup)
+	}
+	for _, setting := range []struct {
+		key     string
+		timeout *time.Duration
+	}{
+		{key: "timeouts.resource.list", timeout: c.Timeouts.Resource.List},
+		{key: "timeouts.resource.status", timeout: c.Timeouts.Resource.Status},
+		{key: "timeouts.resource.apply", timeout: c.Timeouts.Resource.Apply},
+	} {
+		if setting.timeout != nil && *setting.timeout <= 0 {
+			return fmt.Errorf("invalid %s %s: must be positive", setting.key, *setting.timeout)
+		}
 	}
 	return nil
 }
