@@ -14,14 +14,16 @@ func TestDecodeTOML(t *testing.T) {
 	}{
 		{
 			name: "valid settings",
-			data: "log-level = 'debug'\noutput = 'json'\nquiet = true\n",
-			want: Config{LogLevel: "debug", Output: "json", Color: "auto", Quiet: true},
+			data: "output = 'json'\nquiet = true\n[log.console]\nlevel = 'debug'\n[log.file]\nlevel = 'error'\npath = 'logs/app.jsonl'\n",
+			want: Config{LogLevel: "debug", Log: LogConfig{Console: ConsoleLogConfig{Level: "debug"}, File: FileLogConfig{Level: "error", Path: "logs/app.jsonl"}}, Output: "json", Color: "auto", Quiet: true},
 		},
 		{name: "malformed TOML", data: "log-level = [", wantIn: "settings.toml"},
-		{name: "unknown key", data: "log-level = 'debug'\nlog-levels = 'warn'\n", wantIn: `unknown key "log-levels"`},
+		{name: "unknown key", data: "log-levels = 'warn'\n", wantIn: `unknown key "log-levels"`},
+		{name: "unknown nested key", data: "[log.console]\nlevels = 'warn'\n", wantIn: `unknown key "log.console.levels"`},
+		{name: "wrong nested string type", data: "[log.console]\nlevel = 3\n", wantIn: `invalid type for key "log.console.level"`},
 		{name: "wrong string type", data: "output = 3\n", wantIn: `invalid type for key "output"`},
 		{name: "wrong boolean type", data: "quiet = 'yes'\n", wantIn: `invalid type for key "quiet"`},
-		{name: "invalid value", data: "color = 'sometimes'\n", wantIn: "invalid color"},
+		{name: "invalid value", data: "[log.console]\nlevel = 'trace'\n", wantIn: "invalid console log level"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -25,10 +25,27 @@ func decodeTOMLWithSchema(source string, data []byte, schema map[string]valueTyp
 	if err != nil {
 		return nil, fmt.Errorf("decode configuration %s: %w", source, err)
 	}
+	if err := validateValues(source, values, schema, ""); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func validateValues(source string, values map[string]any, schema map[string]valueType, prefix string) error {
 	for key, value := range values {
-		kind, known := schema[key]
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		if nested, ok := value.(map[string]any); ok {
+			if err := validateValues(source, nested, schema, path); err != nil {
+				return err
+			}
+			continue
+		}
+		kind, known := schema[path]
 		if !known {
-			return nil, fmt.Errorf("decode configuration %s: unknown key %q", source, key)
+			return fmt.Errorf("decode configuration %s: unknown key %q", source, path)
 		}
 		var valid bool
 		switch kind {
@@ -37,13 +54,13 @@ func decodeTOMLWithSchema(source string, data []byte, schema map[string]valueTyp
 		case booleanValue:
 			_, valid = value.(bool)
 		default:
-			return nil, fmt.Errorf("decode configuration %s: unsupported type for key %q", source, key)
+			return fmt.Errorf("decode configuration %s: unsupported type for key %q", source, path)
 		}
 		if !valid {
-			return nil, fmt.Errorf("decode configuration %s: invalid type for key %q", source, key)
+			return fmt.Errorf("decode configuration %s: invalid type for key %q", source, path)
 		}
 	}
-	return values, nil
+	return nil
 }
 
 func decodeConfig(values map[string]any) (Config, error) {
@@ -57,6 +74,7 @@ func decodeConfig(values map[string]any) (Config, error) {
 	if err := settings.Unmarshal("", &config); err != nil {
 		return Config{}, err
 	}
+	config.LogLevel = config.Log.Console.Level
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}

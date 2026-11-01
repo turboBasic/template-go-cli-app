@@ -11,10 +11,10 @@ func TestLoadFilesPrecedenceAndSources(t *testing.T) {
 	root := t.TempDir()
 	userPath := filepath.Join(root, "user.toml")
 	projectPath := filepath.Join(root, "project.toml")
-	if err := os.WriteFile(userPath, []byte("log-level = 'info'\noutput = 'json'\n"), 0o600); err != nil {
+	if err := os.WriteFile(userPath, []byte("output = 'json'\n[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(projectPath, []byte("log-level = 'error'\n"), 0o600); err != nil {
+	if err := os.WriteFile(projectPath, []byte("[log.console]\nlevel = 'error'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -22,14 +22,16 @@ func TestLoadFilesPrecedenceAndSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Config{LogLevel: "error", Output: "json", Color: "auto", Quiet: false}); got.Config != want {
+	if want := (Config{LogLevel: "error", Log: LogConfig{Console: ConsoleLogConfig{Level: "error"}, File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: false}); got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
 	for key, want := range map[string]Source{
-		"log-level": Source(projectPath),
-		"output":    Source(userPath),
-		"color":     defaultSource,
-		"quiet":     defaultSource,
+		"log.console.level": Source(projectPath),
+		"log.file.level":    defaultSource,
+		"log.file.path":     defaultSource,
+		"output":            Source(userPath),
+		"color":             defaultSource,
+		"quiet":             defaultSource,
 	} {
 		if got.Sources[key] != want {
 			t.Errorf("source for %q = %q, want %q", key, got.Sources[key], want)

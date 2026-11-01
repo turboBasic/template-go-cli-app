@@ -37,9 +37,13 @@ func mergeFiles(files ConfigFiles) (LoadResult, error) {
 
 func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadResult, error) {
 	values := defaultValues()
-	sources := make(map[string]Source, len(values))
-	for key := range values {
-		sources[key] = defaultSource
+	sources := map[string]Source{
+		"log.console.level": defaultSource,
+		"log.file.level":    defaultSource,
+		"log.file.path":     defaultSource,
+		"output":            defaultSource,
+		"color":             defaultSource,
+		"quiet":             defaultSource,
 	}
 	for _, path := range []string{files.User, files.Project} {
 		if path == "" {
@@ -61,10 +65,13 @@ func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadR
 func defaultValues() map[string]any {
 	config := Defaults()
 	return map[string]any{
-		"log-level": config.LogLevel,
-		"output":    config.Output,
-		"color":     config.Color,
-		"quiet":     config.Quiet,
+		"log": map[string]any{
+			"console": map[string]any{"level": config.Log.Console.Level},
+			"file":    map[string]any{"path": config.Log.File.Path, "level": config.Log.File.Level},
+		},
+		"output": config.Output,
+		"color":  config.Color,
+		"quiet":  config.Quiet,
 	}
 }
 
