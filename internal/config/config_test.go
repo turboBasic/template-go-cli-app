@@ -27,7 +27,7 @@ func TestConfigValidate(t *testing.T) {
 		{name: "invalid file log level", edit: func(c *Config) { c.Log.File.Level = "trace" }, want: "invalid file log level"},
 		{name: "invalid output", edit: func(c *Config) { c.Output = "yaml" }, want: "invalid output"},
 		{name: "invalid color", edit: func(c *Config) { c.Color = "sometimes" }, want: "invalid color"},
-		{name: "json with forced color", edit: func(c *Config) { c.Output, c.Color = "json", "always" }, want: "cannot be used"},
+		{name: "json with forced color", edit: func(c *Config) { c.Output, c.Color = "json", "always" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

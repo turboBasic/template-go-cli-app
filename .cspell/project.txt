@@ -17,6 +17,7 @@ pipx
 prek
 Sigstore
 taplo
+TCGETS
 WCAG
 zizmor
 zizmorcore

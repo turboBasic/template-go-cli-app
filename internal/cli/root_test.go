@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -80,6 +81,35 @@ func TestResourceStatusAndApplyCommands(t *testing.T) {
 	}
 }
 
+func TestResourceCommandsJSONOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "list", args: []string{"resource", "list"}, want: "[{\"name\":\"example-1\",\"status\":\"ready\"},{\"name\":\"example-2\",\"status\":\"pending\"}]\n"},
+		{name: "status", args: []string{"resource", "status", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"pending\"}\n"},
+		{name: "apply", args: []string{"resource", "apply", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"ready\"}\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			command := newTestRootCommand(t)
+			command.SetArgs(append([]string{"--output", "json", "--color", "always"}, test.args...))
+			var output bytes.Buffer
+			command.SetOut(&output)
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if got := output.String(); got != test.want {
+				t.Fatalf("output = %q, want %q", got, test.want)
+			}
+			if strings.Contains(output.String(), "\x1b[") {
+				t.Fatalf("JSON output contains ANSI escape: %q", output.String())
+			}
+		})
+	}
+}
+
 func TestPersistentFlagsAndValidation(t *testing.T) {
 	tests := []struct {
 		name string
@@ -92,7 +122,7 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 		{name: "invalid output", args: []string{"--output", "yaml", "resource", "list"}, bad: true},
 		{name: "invalid log level", args: []string{"--log-level", "trace", "resource", "list"}, bad: true},
 		{name: "invalid color", args: []string{"--color", "sometimes", "resource", "list"}, bad: true},
-		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "resource", "list"}, bad: true},
+		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "resource", "list"}, want: "example-1"},
 		{name: "missing name", args: []string{"resource", "status"}, bad: true},
 		{name: "extra name", args: []string{"resource", "status", "example-1", "example-2"}, bad: true},
 		{name: "unknown name", args: []string{"resource", "status", "missing"}, bad: true},
@@ -107,6 +137,9 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 			err := command.Execute()
 			if tc.bad && err == nil {
 				t.Fatal("Execute() error = nil, want validation error")
+			}
+			if tc.bad && output.Len() != 0 {
+				t.Fatalf("output = %q, want no output for invalid configuration or arguments", output.String())
 			}
 			if !tc.bad && err != nil {
 				t.Fatalf("Execute() error = %v", err)
@@ -185,8 +218,12 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	if got != want {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
 	}
-	if factoryCalls != 1 || !strings.Contains(output.String(), "example-1") {
-		t.Fatalf("factory calls/output = %d/%q, want one call before resource execution", factoryCalls, output.String())
+	if factoryCalls != 1 {
+		t.Fatalf("factory calls = %d, want one call before resource execution", factoryCalls)
+	}
+	var results []map[string]string
+	if err := json.Unmarshal(output.Bytes(), &results); err != nil || len(results) != 2 || results[0]["name"] != "example-1" {
+		t.Fatalf("config-selected output = %q, want JSON resource list (decode error: %v)", output.String(), err)
 	}
 	if gotLogger == nil {
 		t.Fatal("factory logger = nil, want initialized logger")
@@ -228,7 +265,17 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	}, testBuildInfo(), commandReader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
 	var stdout bytes.Buffer
+	var progress bytes.Buffer
 	command.SetOut(&stdout)
+	command.SetErr(&progress)
+	listCommand, _, err := command.Find([]string{"resource", "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listCommand.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		_, err := fmt.Fprintln(cmd.ErrOrStderr(), "progress update")
+		return err
+	}
 	executeErr := command.Execute()
 	os.Stderr = previousStderr
 	if err := writer.Close(); err != nil {
@@ -242,11 +289,29 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	if !strings.Contains(stdout.String(), "example-1") || strings.Contains(stdout.String(), "listing resources") {
-		t.Fatalf("command output = %q, want result only", stdout.String())
+	var results []map[string]string
+	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil || len(results) != 2 || results[0]["name"] != "example-1" {
+		t.Fatalf("command output = %q, want parseable JSON results (decode error: %v)", stdout.String(), err)
 	}
 	if !strings.Contains(string(stderr), "listing resources") || strings.Contains(string(stderr), "example-1") {
 		t.Fatalf("diagnostics = %q, want log record only", stderr)
+	}
+	if progress.String() != "progress update\n" || strings.Contains(stdout.String(), "progress update") {
+		t.Fatalf("progress = %q, stdout = %q; want progress on stderr only", progress.String(), stdout.String())
+	}
+}
+
+func TestRendererWriteErrorsAreReturned(t *testing.T) {
+	wantErr := errors.New("injected write failure")
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			command := newTestRootCommand(t)
+			command.SetArgs([]string{"--output", format, "resource", "list"})
+			command.SetOut(failingWriter{err: wantErr})
+			if err := command.Execute(); !errors.Is(err, wantErr) {
+				t.Fatalf("Execute() error = %v, want writer error", err)
+			}
+		})
 	}
 }
 
@@ -321,6 +386,10 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 }
 
 type failingResourceReader struct{}
+
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
 
 func (failingResourceReader) List(context.Context) ([]domain.Resource, error) {
 	return nil, errors.New("injected reader failure")

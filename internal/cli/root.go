@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/logging"
+	"github.com/turboBasic/template-go-cli-app/internal/output"
 )
 
 const configID = "cli-app"
@@ -49,15 +49,16 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
-	var configPath, logLevel, output, color string
+	var configPath, logLevel, outputFormat, color string
 	var quiet bool
 	flags := root.PersistentFlags()
 	flags.StringVar(&configPath, "config", "", "configuration file path")
 	flags.StringVar(&logLevel, "log-level", "warn", "logging level (debug, info, warn, error)")
-	flags.StringVar(&output, "output", "text", "result format (text, json)")
+	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
 	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	var resources *app.ResourceService
+	var renderer output.Renderer
 	var logResult logging.Result
 	closeLogger := func() error {
 		if logResult.Close == nil {
@@ -75,6 +76,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			return err
 		}
 		resources = nil
+		renderer = output.Renderer{}
 		if isHelpOrCompletion(cmd) {
 			return nil
 		}
@@ -88,13 +90,23 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		}
 		flagValues := map[string]config.FlagValue{
 			"log-level": {Value: logLevel, Changed: flags.Lookup("log-level").Changed, Source: "--log-level"},
-			"output":    {Value: output, Changed: flags.Lookup("output").Changed, Source: "--output"},
+			"output":    {Value: outputFormat, Changed: flags.Lookup("output").Changed, Source: "--output"},
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
 			return err
+		}
+		_, noColor := os.LookupEnv("NO_COLOR")
+		renderer = output.Renderer{
+			Writer: cmd.OutOrStdout(),
+			Options: output.Options{
+				Format:    output.Format(loaded.Config.Output),
+				Color:     output.ColorMode(loaded.Config.Color),
+				Terminals: output.DetectTerminalCapabilities(cmd.OutOrStdout(), cmd.ErrOrStderr()),
+				NoColor:   noColor,
+			},
 		}
 		logResult, err = logging.New(loaded.Config.Log)
 		if err != nil {
@@ -117,9 +129,10 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
 	getResources := func() *app.ResourceService { return resources }
-	list := newResourceListCommand(getResources)
-	status := newResourceStatusCommand(getResources, names)
-	apply := newResourceApplyCommand(getResources, names)
+	getRenderer := func() output.Renderer { return renderer }
+	list := newResourceListCommand(getResources, getRenderer)
+	status := newResourceStatusCommand(getResources, getRenderer, names)
+	apply := newResourceApplyCommand(getResources, getRenderer, names)
 	closeAfterRun(list, closeLogger)
 	closeAfterRun(status, closeLogger)
 	closeAfterRun(apply, closeLogger)
@@ -144,7 +157,7 @@ func isHelpOrCompletion(cmd *cobra.Command) bool {
 	return false
 }
 
-func newResourceListCommand(getResources func() *app.ResourceService) *cobra.Command {
+func newResourceListCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List resources",
@@ -154,24 +167,12 @@ func newResourceListCommand(getResources func() *app.ResourceService) *cobra.Com
 			if err != nil {
 				return err
 			}
-			writer := tabwriter.NewWriter(cmd.OutOrStdout(), 12, 8, 0, ' ', 0)
-			if _, err := fmt.Fprintln(writer, "NAME\tSTATUS"); err != nil {
-				return fmt.Errorf("write resource list: %w", err)
-			}
-			for _, item := range items {
-				if _, err := fmt.Fprintf(writer, "%s\t%s\n", item.Name, item.Status); err != nil {
-					return fmt.Errorf("write resource list: %w", err)
-				}
-			}
-			if err := writer.Flush(); err != nil {
-				return fmt.Errorf("flush resource list: %w", err)
-			}
-			return nil
+			return getRenderer().RenderList(items)
 		},
 	}
 }
 
-func newResourceStatusCommand(getResources func() *app.ResourceService, names []string) *cobra.Command {
+func newResourceStatusCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "status <name>",
 		Short:             "Show a resource status",
@@ -182,15 +183,12 @@ func newResourceStatusCommand(getResources func() *app.ResourceService, names []
 			if err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status); err != nil {
-				return fmt.Errorf("write resource status: %w", err)
-			}
-			return nil
+			return getRenderer().RenderResource(resource)
 		},
 	}
 }
 
-func newResourceApplyCommand(getResources func() *app.ResourceService, names []string) *cobra.Command {
+func newResourceApplyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "apply <name>",
 		Short:             "Apply a resource",
@@ -201,10 +199,7 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, names []s
 			if err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", resource.Name, resource.Status); err != nil {
-				return fmt.Errorf("write applied resource: %w", err)
-			}
-			return nil
+			return getRenderer().RenderResource(resource)
 		},
 	}
 }
