@@ -19,7 +19,7 @@ import (
 const configID = "cli-app"
 
 // ResourceFactory builds the command's application service and its dependency cleanup.
-type ResourceFactory func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error)
+type ResourceFactory func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -30,8 +30,8 @@ type BuildInfo struct {
 
 // NewRootCommand builds an independently configurable command tree.
 func NewRootCommand(reader app.ResourceReader, build BuildInfo, names []string) *cobra.Command {
-	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger, nil), nil, nil
+	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, build, names)
 }
 
@@ -146,6 +146,10 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if err != nil {
 			return fmt.Errorf("initialize logging: %w", err)
 		}
+		var progressReporter app.ProgressReporter = output.NewPlainProgressReporter(cmd.ErrOrStderr())
+		if loaded.Config.Quiet {
+			progressReporter = output.NoopProgressReporter{}
+		}
 		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Resource); timeout != nil {
 			parentContext := cmd.Context()
 			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
@@ -158,7 +162,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if factory == nil {
 			return errors.Join(fmt.Errorf("resource factory is required"), cleanup(cmd.Context()))
 		}
-		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, logResult.Logger)
+		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, logResult.Logger, progressReporter)
 		if err != nil {
 			return errors.Join(fmt.Errorf("create application dependencies: %w", err), cleanup(cmd.Context()))
 		}
