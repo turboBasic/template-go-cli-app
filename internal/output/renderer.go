@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"text/tabwriter"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -16,6 +17,50 @@ const (
 	FormatText Format = "text"
 	FormatJSON Format = "json"
 )
+
+// ColorMode selects when text output may use terminal colors.
+type ColorMode string
+
+const (
+	ColorAuto   ColorMode = "auto"
+	ColorAlways ColorMode = "always"
+	ColorNever  ColorMode = "never"
+)
+
+// TerminalCapabilities reports terminal support for each output stream.
+type TerminalCapabilities struct {
+	Stdout bool
+	Stderr bool
+}
+
+// DetectTerminalCapabilities checks stdout and stderr independently.
+func DetectTerminalCapabilities(stdout, stderr io.Writer) TerminalCapabilities {
+	return TerminalCapabilities{Stdout: isTerminal(stdout), Stderr: isTerminal(stderr)}
+}
+
+// ColorEnabled reports whether the selected text mode permits ANSI styling.
+func ColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities, noColor bool) bool {
+	if format == FormatJSON || mode == ColorNever {
+		return false
+	}
+	if mode == ColorAlways {
+		return true
+	}
+	return terminals.Stdout && !noColor
+}
+
+type fileWithStat interface {
+	Stat() (os.FileInfo, error)
+}
+
+func isTerminal(writer io.Writer) bool {
+	file, ok := writer.(fileWithStat)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
 
 // Renderer writes resource results in the selected format.
 type Renderer struct {

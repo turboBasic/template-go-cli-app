@@ -92,7 +92,7 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 		{name: "invalid output", args: []string{"--output", "yaml", "resource", "list"}, bad: true},
 		{name: "invalid log level", args: []string{"--log-level", "trace", "resource", "list"}, bad: true},
 		{name: "invalid color", args: []string{"--color", "sometimes", "resource", "list"}, bad: true},
-		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "resource", "list"}, bad: true},
+		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "resource", "list"}, want: "example-1"},
 		{name: "missing name", args: []string{"resource", "status"}, bad: true},
 		{name: "extra name", args: []string{"resource", "status", "example-1", "example-2"}, bad: true},
 		{name: "unknown name", args: []string{"resource", "status", "missing"}, bad: true},

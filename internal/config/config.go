@@ -52,9 +52,6 @@ func (c Config) Validate() error {
 	if !oneOf(c.Color, "auto", "always", "never") {
 		return fmt.Errorf("invalid color %q: must be auto, always, or never", c.Color)
 	}
-	if c.Output == "json" && c.Color == "always" {
-		return fmt.Errorf("color always cannot be used with output json")
-	}
 	return nil
 }
 
