@@ -13,14 +13,37 @@ concurrency:
 
 jobs:
   checks:
+    name: ${{ matrix.goos }} / ${{ matrix.goarch }}
     uses: turboBasic/github-actions/.github/workflows/project-ci.yml@v0.4
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            goos: linux
+            goarch: amd64
+            run-lint: true
+            run-coverage: true
+          - runner: ubuntu-26.04-arm
+            goos: linux
+            goarch: arm64
+            run-lint: false
+            run-coverage: false
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            run-lint: false
+            run-coverage: false
     permissions:
       contents: read
     with:
+      runner-type: ${{ matrix.runner }}
+      run-lint: ${{ matrix.run-lint }}
+      run-coverage: ${{ matrix.run-coverage }}
       run-typecheck: false
 
-  race-coverage:
-    name: race & coverage
+  race:
+    name: race
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -35,50 +58,3 @@ jobs:
 
       - name: Test with race detector
         run: mise run test-race
-
-      - name: Report coverage
-        run: mise run coverage
-
-  platform-smoke:
-    name: ${{ matrix.goos }} / ${{ matrix.goarch }}
-    needs: [checks, race-coverage]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-26.04
-            goos: linux
-            goarch: amd64
-          - runner: ubuntu-26.04-arm
-            goos: linux
-            goarch: arm64
-          - runner: macos-15-intel
-            goos: darwin
-            goarch: amd64
-          - runner: macos-15
-            goos: darwin
-            goarch: arm64
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
-        with:
-          minimum_release_age: 24h
-
-      - name: Verify native Go target
-        env:
-          EXPECTED_GOOS: ${{ matrix.goos }}
-          EXPECTED_GOARCH: ${{ matrix.goarch }}
-        run: |
-          test "$(go env GOOS)" = "$EXPECTED_GOOS"
-          test "$(go env GOARCH)" = "$EXPECTED_GOARCH"
-
-      - name: Build and test
-        run: |
-          mise run build
-          mise run test
