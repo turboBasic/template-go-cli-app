@@ -92,6 +92,16 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
+func TestUnknownCommandUsesUsageExitCode(t *testing.T) {
+	reader := memory.NewResourceReader()
+	command := cli.NewRootCommand(reader, cli.BuildInfo{}, reader.Names())
+	command.SetArgs([]string{"missing"})
+	var stderr bytes.Buffer
+	if got := execute(func() error { return runCommand(command) }, &stderr); got != 2 {
+		t.Fatalf("exit code = %d, want 2; stderr = %q", got, stderr.String())
+	}
+}
+
 type failingWriter struct{ err error }
 
 func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }

@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
@@ -30,7 +31,15 @@ func main() {
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
 		return app.NewResourceService(resources, logger), nil
 	}, buildInfo(), resources.Names())
-	os.Exit(execute(command.Execute, os.Stderr))
+	os.Exit(execute(func() error { return runCommand(command) }, os.Stderr))
+}
+
+func runCommand(command *cobra.Command) error {
+	selected, err := command.ExecuteC()
+	if err != nil && selected != nil && !selected.Runnable() {
+		return app.Classify(app.ErrValidation, err)
+	}
+	return err
 }
 
 func execute(run func() error, stderr io.Writer) int {
