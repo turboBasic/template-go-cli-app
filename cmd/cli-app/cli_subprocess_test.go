@@ -13,7 +13,11 @@ import (
 
 func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	binary := buildCLIProcess(t)
-	stdout, stderr, code := runCLIProcess(t, binary, "resource", "apply", "invalid", "--output", "json")
+	stdout, stderr, code := runCLIProcess(t, binary, "resource", "list")
+	if code != 0 || stderr != "" || stdout != "NAME        STATUS\nexample-1   ready\nexample-2   pending\n" {
+		t.Fatalf("resource list = stdout %q, stderr %q, exit %d; want deterministic fixture output and exit 0", stdout, stderr, code)
+	}
+	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "invalid", "--output", "json")
 	if stdout != "" || code != 2 || !strings.Contains(stderr, "unknown resource") {
 		t.Fatalf("invalid JSON command = stdout %q, stderr %q, exit %d; want empty stdout, diagnostic stderr, exit 2", stdout, stderr, code)
 	}
@@ -33,15 +37,22 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 		t.Fatalf("successful JSON command = stderr %q, exit %d; want empty stderr and exit 0", stderr, code)
 	}
 
-	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "example-1", "--output", "json")
+	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "example-1", "--output", "json", "--log-level", "debug")
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil || result != (struct {
 		Name   string `json:"name"`
 		Status string `json:"status"`
 	}{Name: "example-1", Status: "ready"}) {
 		t.Fatalf("applied JSON = %q (decode error %v), want the existing resource result shape", stdout, err)
 	}
-	if code != 0 || stderr != "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n" {
-		t.Fatalf("apply JSON command = stderr %q, exit %d; want stable progress on stderr and exit 0", stderr, code)
+	wantProgress := []string{"applying: Applying resource", "validating: Validating resource", "complete: Resource applied (1/1)"}
+	lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
+	if code != 0 || len(lines) != len(wantProgress)+1 || !strings.Contains(lines[0], "level=DEBUG") || !strings.Contains(lines[0], "msg=\"applying resource\"") {
+		t.Fatalf("apply JSON command = stderr %q, exit %d; want debug logging and progress on stderr", stderr, code)
+	}
+	for i, line := range wantProgress {
+		if lines[i+1] != line {
+			t.Fatalf("apply JSON progress line %d = %q, want %q", i+1, lines[i+1], line)
+		}
 	}
 }
 
