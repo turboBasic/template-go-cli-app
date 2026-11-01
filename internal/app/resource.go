@@ -23,7 +23,7 @@ func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resou
 		return domain.Resource{}, fmt.Errorf("get resource status: %w", err)
 	}
 	if err := resource.Validate(); err != nil {
-		return domain.Resource{}, fmt.Errorf("validate resource status: %w", err)
+		return domain.Resource{}, fmt.Errorf("validate resource status: %w", Classify(ErrValidation, err))
 	}
 	return resource, nil
 }
@@ -36,7 +36,7 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", err)
 	}
 	if err := resource.Validate(); err != nil {
-		return domain.Resource{}, fmt.Errorf("validate applied resource: %w", err)
+		return domain.Resource{}, fmt.Errorf("validate applied resource: %w", Classify(ErrValidation, err))
 	}
 	return resource, nil
 }
@@ -61,7 +61,7 @@ func (s *ResourceService) List(ctx context.Context) ([]domain.Resource, error) {
 	}
 	for i, resource := range resources {
 		if err := resource.Validate(); err != nil {
-			return nil, fmt.Errorf("resource %d: %w", i, err)
+			return nil, fmt.Errorf("resource %d: %w", i, Classify(ErrValidation, err))
 		}
 	}
 	return resources, nil
