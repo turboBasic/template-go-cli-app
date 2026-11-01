@@ -58,15 +58,28 @@ func detectTerminalCapabilities(stdout, stderr io.Writer, check func(io.Writer) 
 	return TerminalCapabilities{Stdout: check(stdout), Stderr: check(stderr)}
 }
 
+// Options controls result formatting and terminal color policy.
+type Options struct {
+	Format    Format
+	Color     ColorMode
+	Terminals TerminalCapabilities
+	NoColor   bool
+}
+
 // Renderer writes resource results in the selected format.
 type Renderer struct {
-	Writer io.Writer
-	Format Format
+	Writer  io.Writer
+	Options Options
+}
+
+// ColorEnabled reports whether this renderer may use ANSI styling.
+func (r Renderer) ColorEnabled() bool {
+	return ColorEnabled(r.Options.Format, r.Options.Color, r.Options.Terminals, r.Options.NoColor)
 }
 
 // RenderList writes a resource list.
 func (r Renderer) RenderList(resources []domain.Resource) error {
-	if r.Format == FormatJSON {
+	if r.Options.Format == FormatJSON {
 		items := make([]struct {
 			Name   string `json:"name"`
 			Status string `json:"status"`
@@ -98,7 +111,7 @@ func (r Renderer) RenderList(resources []domain.Resource) error {
 
 // RenderResource writes one resource.
 func (r Renderer) RenderResource(resource domain.Resource) error {
-	if r.Format == FormatJSON {
+	if r.Options.Format == FormatJSON {
 		if err := json.NewEncoder(r.Writer).Encode(struct {
 			Name   string `json:"name"`
 			Status string `json:"status"`

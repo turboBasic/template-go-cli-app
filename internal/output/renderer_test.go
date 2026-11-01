@@ -32,7 +32,7 @@ func TestRendererText(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
-			renderer := Renderer{Writer: &output, Format: FormatText}
+			renderer := Renderer{Writer: &output, Options: Options{Format: FormatText}}
 			if err := test.run(&renderer); err != nil {
 				t.Fatal(err)
 			}
@@ -86,10 +86,10 @@ func TestRendererJSON(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var first, second bytes.Buffer
-			if err := (Renderer{Writer: &first, Format: FormatJSON}).run(test.run); err != nil {
+			if err := (Renderer{Writer: &first, Options: Options{Format: FormatJSON}}).run(test.run); err != nil {
 				t.Fatal(err)
 			}
-			if err := (Renderer{Writer: &second, Format: FormatJSON}).run(test.run); err != nil {
+			if err := (Renderer{Writer: &second, Options: Options{Format: FormatJSON}}).run(test.run); err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(first.Bytes(), second.Bytes()) {
@@ -159,7 +159,7 @@ func TestRendererNeverAddsANSI(t *testing.T) {
 	for _, format := range []Format{FormatText, FormatJSON} {
 		t.Run(string(format), func(t *testing.T) {
 			var output bytes.Buffer
-			renderer := Renderer{Writer: &output, Format: format}
+			renderer := Renderer{Writer: &output, Options: Options{Format: format}}
 			if err := renderer.RenderList([]domain.Resource{{Name: "example-1", Status: "ready"}}); err != nil {
 				t.Fatal(err)
 			}
