@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -29,7 +31,7 @@ func (r fakeResourceReader) Apply(context.Context, string) (domain.Resource, err
 
 func TestResourceServiceList(t *testing.T) {
 	want := []domain.Resource{{Name: "example-1", Status: "ready"}}
-	service := NewResourceService(fakeResourceReader{resources: want})
+	service := newTestResourceService(fakeResourceReader{resources: want})
 
 	got, err := service.List(context.Background())
 	if err != nil {
@@ -42,7 +44,7 @@ func TestResourceServiceList(t *testing.T) {
 
 func TestResourceServiceStatusAndApply(t *testing.T) {
 	want := domain.Resource{Name: "example-2", Status: "ready"}
-	service := NewResourceService(fakeResourceReader{resource: want})
+	service := newTestResourceService(fakeResourceReader{resource: want})
 	for name, useCase := range map[string]func(context.Context, string) (domain.Resource, error){
 		"Status": service.Status,
 		"Apply":  service.Apply,
@@ -58,7 +60,7 @@ func TestResourceServiceStatusAndApply(t *testing.T) {
 
 func TestResourceServiceStatusAndApplyWrapAdapterError(t *testing.T) {
 	wantErr := errors.New("adapter unavailable")
-	service := NewResourceService(fakeResourceReader{err: wantErr})
+	service := newTestResourceService(fakeResourceReader{err: wantErr})
 	for name, useCase := range map[string]func(context.Context, string) (domain.Resource, error){
 		"Status": service.Status,
 		"Apply":  service.Apply,
@@ -73,7 +75,7 @@ func TestResourceServiceStatusAndApplyWrapAdapterError(t *testing.T) {
 
 func TestResourceServiceListPropagatesReaderError(t *testing.T) {
 	wantErr := errors.New("reader unavailable")
-	service := NewResourceService(fakeResourceReader{err: wantErr})
+	service := newTestResourceService(fakeResourceReader{err: wantErr})
 
 	_, err := service.List(context.Background())
 	if !errors.Is(err, wantErr) {
@@ -82,11 +84,15 @@ func TestResourceServiceListPropagatesReaderError(t *testing.T) {
 }
 
 func TestResourceServiceListRejectsInvalidResource(t *testing.T) {
-	service := NewResourceService(fakeResourceReader{
+	service := newTestResourceService(fakeResourceReader{
 		resources: []domain.Resource{{Status: "ready"}},
 	})
 
 	if _, err := service.List(context.Background()); err == nil {
 		t.Fatal("List() error = nil, want invalid resource error")
 	}
+}
+
+func newTestResourceService(reader ResourceReader) *ResourceService {
+	return NewResourceService(reader, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
