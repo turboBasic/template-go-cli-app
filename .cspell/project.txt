@@ -15,6 +15,7 @@ Mise
 onepassword
 pipx
 prek
+Roosty
 Sigstore
 taplo
 TCGETS

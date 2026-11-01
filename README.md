@@ -1,6 +1,8 @@
-# Go CLI App Template · 🦫
+# Go CLI App Template
 
 [![CI][ci-badge]][ci] [![Go 1.27.3][go-badge]][go] [![License: MIT][license-badge]][license]
+
+<div align="center"> <img src="assets/logo.png" alt="Roosty CLI App" width="640"> </div>
 
 A GitHub template for starting Go command-line applications. It includes a pinned Go toolchain,
 development tasks, quality checks, and an architecture specification for the application as it grows.
