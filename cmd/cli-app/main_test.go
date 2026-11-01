@@ -96,34 +96,106 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-func TestSecondSignalBypassesCleanup(t *testing.T) {
-	if os.Getenv("CLI_APP_SIGNAL_HELPER") == "1" {
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "no-user-config"))
-		configFile := filepath.Join(t.TempDir(), "settings.toml")
-		if err := os.WriteFile(configFile, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		resources := memory.NewResourceReader()
-		reader := signalBlockingReader{ResourceReader: resources}
-		command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-			return app.NewResourceService(reader, logger), func(ctx context.Context) error {
-				_, _ = fmt.Fprintln(os.Stdout, "cleanup started")
-				<-ctx.Done()
-				return ctx.Err()
-			}, nil
-		}, cli.BuildInfo{}, resources.Names())
-		command.SetArgs([]string{"--config", configFile, "resource", "list"})
-		code := executeWithSignals(func(ctx context.Context) error {
-			_, _ = fmt.Fprintln(os.Stdout, "ready")
-			command.SetContext(ctx)
-			return runCommand(command)
-		}, os.Stderr)
-		_, _ = fmt.Fprintf(os.Stdout, "exit=%d\n", code)
+func TestSignalHelperProcess(t *testing.T) {
+	if os.Getenv("CLI_APP_SIGNAL_HELPER") != "1" {
 		return
 	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "no-user-config"))
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resources := memory.NewResourceReader()
+	reader := signalBlockingReader{ResourceReader: resources}
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger), func(ctx context.Context) error {
+			_, _ = fmt.Fprintln(os.Stdout, "cleanup started")
+			if os.Getenv("CLI_APP_SIGNAL_HELPER_BLOCK_CLEANUP") == "1" {
+				<-ctx.Done()
+				return ctx.Err()
+			}
+			return nil
+		}, nil
+	}, cli.BuildInfo{}, resources.Names())
+	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	code := executeWithSignals(func(ctx context.Context) error {
+		_, _ = fmt.Fprintln(os.Stdout, "ready")
+		command.SetContext(ctx)
+		return runCommand(command)
+	}, os.Stderr)
+	_, _ = fmt.Fprintf(os.Stdout, "exit=%d\n", code)
+}
 
-	command := exec.Command(os.Args[0], "-test.run=^TestSecondSignalBypassesCleanup$")
-	command.Env = append(os.Environ(), "CLI_APP_SIGNAL_HELPER=1")
+func TestFirstSignalCancelsCleansUpAndMapsExitCode(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		signal os.Signal
+		code   string
+	}{
+		{name: "SIGINT", signal: os.Interrupt, code: "exit=130"},
+		{name: "SIGTERM", signal: syscall.SIGTERM, code: "exit=143"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command, lines := startSignalHelper(t, false)
+			if got := nextSignalLine(t, lines); got != "ready" {
+				t.Fatalf("helper output = %q, want ready", got)
+			}
+			if got := nextSignalLine(t, lines); got != "operation started" {
+				t.Fatalf("helper output = %q, want operation started", got)
+			}
+			if err := command.Process.Signal(test.signal); err != nil {
+				t.Fatal(err)
+			}
+			if got := nextSignalLine(t, lines); got != "cleanup started" {
+				t.Fatalf("helper output = %q, want cleanup started", got)
+			}
+			if got := nextSignalLine(t, lines); got != test.code {
+				t.Fatalf("helper output = %q, want %s", got, test.code)
+			}
+			if err := command.Wait(); err != nil {
+				t.Fatalf("signal helper: %v", err)
+			}
+		})
+	}
+}
+
+func TestSecondSignalBypassesCleanup(t *testing.T) {
+	command, lines := startSignalHelper(t, true)
+	if got := nextSignalLine(t, lines); got != "ready" {
+		t.Fatalf("helper output = %q, want ready", got)
+	}
+	if got := nextSignalLine(t, lines); got != "operation started" {
+		t.Fatalf("helper output = %q, want operation started", got)
+	}
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextSignalLine(t, lines); got != "cleanup started" {
+		t.Fatalf("helper output = %q, want cleanup started", got)
+	}
+	started := time.Now()
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextSignalLine(t, lines); got != "exit=143" {
+		t.Fatalf("helper output = %q, want exit=143", got)
+	}
+	if elapsed := time.Since(started); elapsed >= time.Second {
+		t.Fatalf("second signal took %s to bypass 5s cleanup", elapsed)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatalf("signal helper: %v", err)
+	}
+}
+
+func startSignalHelper(t *testing.T, blockCleanup bool) (*exec.Cmd, <-chan string) {
+	t.Helper()
+	command := exec.Command(os.Args[0], "-test.run=^TestSignalHelperProcess$")
+	blockValue := "0"
+	if blockCleanup {
+		blockValue = "1"
+	}
+	command.Env = append(os.Environ(), "CLI_APP_SIGNAL_HELPER=1", "CLI_APP_SIGNAL_HELPER_BLOCK_CLEANUP="+blockValue)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -139,43 +211,20 @@ func TestSecondSignalBypassesCleanup(t *testing.T) {
 		}
 		close(lines)
 	}()
-	readLine := func() string {
-		t.Helper()
-		select {
-		case line, ok := <-lines:
-			if !ok {
-				t.Fatal("signal helper exited before writing expected output")
-			}
-			return line
-		case <-time.After(2 * time.Second):
-			t.Fatal("timed out waiting for signal helper output")
-			return ""
+	return command, lines
+}
+
+func nextSignalLine(t *testing.T, lines <-chan string) string {
+	t.Helper()
+	select {
+	case line, ok := <-lines:
+		if !ok {
+			t.Fatal("signal helper exited before writing expected output")
 		}
-	}
-	if got := readLine(); got != "ready" {
-		t.Fatalf("helper output = %q, want ready", got)
-	}
-	if got := readLine(); got != "operation started" {
-		t.Fatalf("helper output = %q, want operation started", got)
-	}
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatal(err)
-	}
-	if got := readLine(); got != "cleanup started" {
-		t.Fatalf("helper output = %q, want cleanup started", got)
-	}
-	started := time.Now()
-	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatal(err)
-	}
-	if got := readLine(); got != "exit=143" {
-		t.Fatalf("helper output = %q, want exit=143", got)
-	}
-	if elapsed := time.Since(started); elapsed >= time.Second {
-		t.Fatalf("second signal took %s to bypass 5s cleanup", elapsed)
-	}
-	if err := command.Wait(); err != nil {
-		t.Fatalf("signal helper: %v", err)
+		return line
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for signal helper output")
+		return ""
 	}
 }
 
