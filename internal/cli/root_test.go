@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -14,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
+	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
 )
 
@@ -245,6 +248,90 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	if !strings.Contains(string(stderr), "listing resources") || strings.Contains(string(stderr), "example-1") {
 		t.Fatalf("diagnostics = %q, want log record only", stderr)
 	}
+}
+
+func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
+	for _, failCommand := range []bool{false, true} {
+		name := "success"
+		if failCommand {
+			name = "command error"
+		}
+		t.Run(name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			root := t.TempDir()
+			if err := os.Mkdir(filepath.Join(root, "logs"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			fixture, err := os.ReadFile("testdata/log-file.toml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(root, "settings.toml")
+			if err := os.WriteFile(configPath, fixture, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			reader := app.ResourceReader(memory.NewResourceReader())
+			if failCommand {
+				reader = failingResourceReader{}
+			}
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+				return app.NewResourceService(reader, logger), nil
+			}, testBuildInfo(), memory.NewResourceReader().Names())
+			command.SetArgs([]string{"--config", configPath, "resource", "list"})
+			command.SetOut(&bytes.Buffer{})
+			err = command.Execute()
+			if failCommand && (err == nil || !strings.Contains(err.Error(), "injected reader failure")) {
+				t.Fatalf("Execute() error = %v, want injected reader error", err)
+			}
+			if !failCommand && err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+
+			logPath := filepath.Join(root, "logs", "cli-app.jsonl")
+			file, err := os.Open(logPath)
+			if err != nil {
+				t.Fatalf("open source-relative log file: %v", err)
+			}
+			scanner := bufio.NewScanner(file)
+			var records int
+			for scanner.Scan() {
+				var record map[string]any
+				if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+					t.Fatalf("JSONL record %q: %v", scanner.Text(), err)
+				}
+				if record["msg"] != "listing resources" {
+					t.Errorf("log record = %#v, want application debug record", record)
+				}
+				records++
+			}
+			if err := scanner.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if records != 1 {
+				t.Fatalf("JSONL records = %d, want 1", records)
+			}
+			if err := os.Remove(logPath); err != nil {
+				t.Fatalf("remove closed log file: %v", err)
+			}
+		})
+	}
+}
+
+type failingResourceReader struct{}
+
+func (failingResourceReader) List(context.Context) ([]domain.Resource, error) {
+	return nil, errors.New("injected reader failure")
+}
+
+func (failingResourceReader) Status(context.Context, string) (domain.Resource, error) {
+	return domain.Resource{}, errors.New("injected reader failure")
+}
+
+func (failingResourceReader) Apply(context.Context, string) (domain.Resource, error) {
+	return domain.Resource{}, errors.New("injected reader failure")
 }
 
 func TestFactoryErrorPropagates(t *testing.T) {
