@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -17,16 +18,35 @@ func TestSecretLogValue(t *testing.T) {
 	}
 }
 
+func TestRedactConcurrentReuseOfGroup(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(redact(slog.NewJSONHandler(&output, nil)))
+	group := slog.Group("credentials", slog.String("token", "shared-secret"))
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			logger.Info("connect", group)
+		}()
+	}
+	workers.Wait()
+	if got := group.Value.Group()[0].Value.String(); got != "shared-secret" {
+		t.Fatalf("caller-owned group value changed to %q", got)
+	}
+}
+
 func TestRedactSensitiveAndNestedAttributes(t *testing.T) {
 	var output bytes.Buffer
 	logger := slog.New(redact(slog.NewJSONHandler(&output, nil)))
+	group := slog.Group("credentials",
+		slog.String("api_key", "key-secret"),
+		slog.Group("database", slog.String("PASSWORD", "password-secret")),
+	)
 	logger.Info("connect",
 		slog.String("host", "api.example.com"),
 		slog.String("Access-Token", "token-secret"),
-		slog.Group("credentials",
-			slog.String("api_key", "key-secret"),
-			slog.Group("database", slog.String("PASSWORD", "password-secret")),
-		),
+		group,
 		slog.String("authorization", "auth-secret"),
 	)
 	got := output.String()
@@ -39,6 +59,9 @@ func TestRedactSensitiveAndNestedAttributes(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("log output = %s, want it to include %q", got, want)
 		}
+	}
+	if got := group.Value.Group()[0].Value.String(); got != "key-secret" {
+		t.Fatalf("caller-owned group value changed to %q", got)
 	}
 }
 

@@ -55,7 +55,7 @@ func redactAttr(attr slog.Attr, groups []string) slog.Attr {
 		return attr
 	}
 	if attr.Value.Kind() == slog.KindGroup {
-		children := attr.Value.Group()
+		children := append([]slog.Attr(nil), attr.Value.Group()...)
 		for i := range children {
 			children[i] = redactAttr(children[i], append(groups, attr.Key))
 		}
