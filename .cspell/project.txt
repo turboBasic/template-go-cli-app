@@ -5,6 +5,8 @@ commitizen
 dotenv
 gofmt
 goimports
+GOARCH
+goarch
 golangci
 gomod
 jactionlint

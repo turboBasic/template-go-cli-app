@@ -2,6 +2,7 @@ name: 🌜 ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -12,9 +13,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  platforms:
+    name: ${{ matrix.goos }} / ${{ matrix.goarch }}
     uses: turboBasic/github-actions/.github/workflows/project-ci.yml@v0.4
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            goos: linux
+            goarch: amd64
+            run-lint: true
+            run-coverage: true
+          - runner: ubuntu-26.04-arm
+            goos: linux
+            goarch: arm64
+            run-lint: false
+            run-coverage: false
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            run-lint: false
+            run-coverage: false
     permissions:
       contents: read
     with:
+      runner-type: ${{ matrix.runner }}
+      run-lint: ${{ matrix.run-lint }}
+      run-coverage: ${{ matrix.run-coverage }}
       run-typecheck: false
+
+  checks:
+    name: checks
+    if: always()
+    needs: [platforms]
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Require all platform checks to pass
+        env:
+          PLATFORMS_RESULT: ${{ needs.platforms.result }}
+        run: test "$PLATFORMS_RESULT" = success
+
+  race:
+    name: race
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          minimum_release_age: 24h
+
+      - name: Test with race detector
+        run: mise run test-race
