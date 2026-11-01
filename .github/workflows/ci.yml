@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  platforms:
     name: ${{ matrix.goos }} / ${{ matrix.goarch }}
     uses: turboBasic/github-actions/.github/workflows/project-ci.yml@v0.4
     strategy:
@@ -42,6 +42,18 @@ jobs:
       run-lint: ${{ matrix.run-lint }}
       run-coverage: ${{ matrix.run-coverage }}
       run-typecheck: false
+
+  checks:
+    name: checks
+    if: always()
+    needs: [platforms]
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Require all platform checks to pass
+        env:
+          PLATFORMS_RESULT: ${{ needs.platforms.result }}
+        run: test "$PLATFORMS_RESULT" = success
 
   race:
     name: race
