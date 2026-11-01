@@ -23,24 +23,18 @@ jobs:
           - runner: ubuntu-26.04
             goos: linux
             goarch: amd64
-            run-lint: true
-            run-coverage: true
           - runner: ubuntu-26.04-arm
             goos: linux
             goarch: arm64
-            run-lint: false
-            run-coverage: false
           - runner: macos-latest
             goos: darwin
             goarch: arm64
-            run-lint: false
-            run-coverage: false
     permissions:
       contents: read
     with:
       runner-type: ${{ matrix.runner }}
-      run-lint: ${{ matrix.run-lint }}
-      run-coverage: ${{ matrix.run-coverage }}
+      run-lint: ${{ matrix.goos == 'linux' && matrix.goarch == 'amd64' }}
+      run-coverage: ${{ matrix.goos == 'linux' && matrix.goarch == 'amd64' }}
       run-typecheck: false
 
   checks:
@@ -48,19 +42,14 @@ jobs:
     if: always()
     needs: [platforms]
     runs-on: ubuntu-26.04
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - name: Require all platform checks to pass
         env:
           PLATFORMS_RESULT: ${{ needs.platforms.result }}
         run: test "$PLATFORMS_RESULT" = success
 
-  race:
-    name: race
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
