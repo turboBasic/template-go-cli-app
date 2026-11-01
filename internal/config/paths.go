@@ -15,13 +15,16 @@ func resolvePaths(values map[string]any, sources map[string]Source, workingDir s
 		if kind != pathValue {
 			continue
 		}
-		value, ok := values[key]
+		value, ok := nestedLookup(values, key)
 		if !ok {
 			continue
 		}
 		path, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("resolve configuration path %q: expected string, got %T", key, value)
+		}
+		if path == "" {
+			continue
 		}
 		if filepath.IsAbs(path) {
 			continue
@@ -30,9 +33,34 @@ func resolvePaths(values map[string]any, sources map[string]Source, workingDir s
 		if err != nil {
 			return fmt.Errorf("resolve configuration path %q: %w", key, err)
 		}
-		values[key] = filepath.Clean(filepath.Join(base, path))
+		nestedSet(values, key, filepath.Clean(filepath.Join(base, path)))
 	}
 	return nil
+}
+
+func nestedLookup(values map[string]any, key string) (any, bool) {
+	parts := strings.Split(key, ".")
+	var value any = values
+	for _, part := range parts {
+		group, ok := value.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		value, ok = group[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	return value, true
+}
+
+func nestedSet(values map[string]any, key string, value any) {
+	parts := strings.Split(key, ".")
+	group := values
+	for _, part := range parts[:len(parts)-1] {
+		group = group[part].(map[string]any)
+	}
+	group[parts[len(parts)-1]] = value
 }
 
 func pathBase(source Source, workingDir string) (string, error) {
