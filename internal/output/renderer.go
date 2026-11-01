@@ -35,7 +35,7 @@ type TerminalCapabilities struct {
 
 // DetectTerminalCapabilities checks stdout and stderr independently.
 func DetectTerminalCapabilities(stdout, stderr io.Writer) TerminalCapabilities {
-	return TerminalCapabilities{Stdout: isTerminal(stdout), Stderr: isTerminal(stderr)}
+	return detectTerminalCapabilities(stdout, stderr, isTerminal)
 }
 
 // ColorEnabled reports whether the selected text mode permits ANSI styling.
@@ -49,17 +49,13 @@ func ColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities,
 	return terminals.Stdout && !noColor
 }
 
-type fileWithStat interface {
-	Stat() (os.FileInfo, error)
+func isTerminal(writer io.Writer) bool {
+	file, ok := writer.(*os.File)
+	return ok && isTerminalFile(file)
 }
 
-func isTerminal(writer io.Writer) bool {
-	file, ok := writer.(fileWithStat)
-	if !ok {
-		return false
-	}
-	info, err := file.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+func detectTerminalCapabilities(stdout, stderr io.Writer, check func(io.Writer) bool) TerminalCapabilities {
+	return TerminalCapabilities{Stdout: check(stdout), Stderr: check(stderr)}
 }
 
 // Renderer writes resource results in the selected format.

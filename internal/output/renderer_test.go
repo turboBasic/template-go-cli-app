@@ -3,10 +3,10 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 )
@@ -101,11 +101,32 @@ func TestRendererJSON(t *testing.T) {
 }
 
 func TestDetectTerminalCapabilities(t *testing.T) {
-	terminal := terminalWriter{info: testFileInfo{mode: os.ModeCharDevice}}
-	pipe := terminalWriter{info: testFileInfo{mode: 0}}
-	got := DetectTerminalCapabilities(terminal, pipe)
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	got := detectTerminalCapabilities(stdout, stderr, func(writer io.Writer) bool { return writer == stdout })
 	if !got.Stdout || got.Stderr {
-		t.Fatalf("capabilities = %+v, want stdout terminal and stderr non-terminal", got)
+		t.Fatalf("capabilities = %+v, want injected stdout terminal and stderr non-terminal", got)
+	}
+}
+
+func TestNonTerminalCharacterDevice(t *testing.T) {
+	file, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("close null device: %v", err)
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeCharDevice == 0 {
+		t.Skip("null device is not reported as a character device on this platform")
+	}
+	if isTerminal(file) {
+		t.Fatal("null device was detected as a terminal")
 	}
 }
 
@@ -148,23 +169,5 @@ func TestRendererNeverAddsANSI(t *testing.T) {
 		})
 	}
 }
-
-type terminalWriter struct {
-	info os.FileInfo
-	err  error
-}
-
-func (w terminalWriter) Write(data []byte) (int, error) { return len(data), nil }
-
-func (w terminalWriter) Stat() (os.FileInfo, error) { return w.info, w.err }
-
-type testFileInfo struct{ mode os.FileMode }
-
-func (i testFileInfo) Name() string       { return "test" }
-func (i testFileInfo) Size() int64        { return 0 }
-func (i testFileInfo) Mode() os.FileMode  { return i.mode }
-func (i testFileInfo) ModTime() time.Time { return time.Time{} }
-func (i testFileInfo) IsDir() bool        { return false }
-func (i testFileInfo) Sys() any           { return nil }
 
 func (r Renderer) run(render func(*Renderer) error) error { return render(&r) }
