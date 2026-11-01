@@ -48,11 +48,13 @@ func main() {
 		}
 		return app.NewResourceService(reader, logger), nil, nil
 	}, buildInfo(), resources.Names())
-	os.Exit(executeWithSignals(func(ctx context.Context) error {
+	exitWithCode(executeWithSignals(func(ctx context.Context) error {
 		command.SetContext(ctx)
 		return runCommand(command)
 	}, os.Stderr))
 }
+
+func exitWithCode(code int) { os.Exit(code) }
 
 func runCommand(command *cobra.Command) error {
 	selected, err := command.ExecuteC()

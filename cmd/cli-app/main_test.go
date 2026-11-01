@@ -123,17 +123,17 @@ func TestSignalHelperProcess(t *testing.T) {
 		command.SetContext(ctx)
 		return runCommand(command)
 	}, os.Stderr)
-	_, _ = fmt.Fprintf(os.Stdout, "exit=%d\n", code)
+	exitWithCode(code)
 }
 
 func TestFirstSignalCancelsCleansUpAndMapsExitCode(t *testing.T) {
 	for _, test := range []struct {
-		name   string
-		signal os.Signal
-		code   string
+		name     string
+		signal   os.Signal
+		exitCode int
 	}{
-		{name: "SIGINT", signal: os.Interrupt, code: "exit=130"},
-		{name: "SIGTERM", signal: syscall.SIGTERM, code: "exit=143"},
+		{name: "SIGINT", signal: os.Interrupt, exitCode: 130},
+		{name: "SIGTERM", signal: syscall.SIGTERM, exitCode: 143},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			command, lines := startSignalHelper(t, false)
@@ -149,11 +149,8 @@ func TestFirstSignalCancelsCleansUpAndMapsExitCode(t *testing.T) {
 			if got := nextSignalLine(t, lines); got != "cleanup started" {
 				t.Fatalf("helper output = %q, want cleanup started", got)
 			}
-			if got := nextSignalLine(t, lines); got != test.code {
-				t.Fatalf("helper output = %q, want %s", got, test.code)
-			}
-			if err := command.Wait(); err != nil {
-				t.Fatalf("signal helper: %v", err)
+			if got := waitSignalExitCode(t, command); got != test.exitCode {
+				t.Fatalf("signal helper exit code = %d, want %d", got, test.exitCode)
 			}
 		})
 	}
@@ -177,14 +174,11 @@ func TestSecondSignalBypassesCleanup(t *testing.T) {
 	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	if got := nextSignalLine(t, lines); got != "exit=143" {
-		t.Fatalf("helper output = %q, want exit=143", got)
+	if got := waitSignalExitCode(t, command); got != 143 {
+		t.Fatalf("signal helper exit code = %d, want 143", got)
 	}
 	if elapsed := time.Since(started); elapsed >= time.Second {
 		t.Fatalf("second signal took %s to bypass 5s cleanup", elapsed)
-	}
-	if err := command.Wait(); err != nil {
-		t.Fatalf("signal helper: %v", err)
 	}
 }
 
@@ -226,6 +220,19 @@ func nextSignalLine(t *testing.T, lines <-chan string) string {
 		t.Fatal("timed out waiting for signal helper output")
 		return ""
 	}
+}
+
+func waitSignalExitCode(t *testing.T, command *exec.Cmd) int {
+	t.Helper()
+	err := command.Wait()
+	if err == nil {
+		return 0
+	}
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) {
+		t.Fatalf("signal helper process: %v", err)
+	}
+	return exitError.ExitCode()
 }
 
 type signalBlockingReader struct{ app.ResourceReader }
