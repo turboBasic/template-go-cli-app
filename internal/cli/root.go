@@ -66,7 +66,12 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	var resources *app.ResourceService
 	var renderer output.Renderer
 	var logResult logging.Result
+	var cancelOperation context.CancelFunc
 	closeLogger := func() error {
+		if cancelOperation != nil {
+			cancelOperation()
+			cancelOperation = nil
+		}
 		if logResult.Close == nil {
 			return nil
 		}
@@ -122,6 +127,15 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if err != nil {
 			return fmt.Errorf("initialize logging: %w", err)
 		}
+		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Resource); timeout != nil {
+			parentContext := cmd.Context()
+			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
+			cmd.SetContext(operationContext)
+			cancelOperation = func() {
+				cancel()
+				cmd.SetContext(parentContext)
+			}
+		}
 		if factory == nil {
 			return errors.Join(fmt.Errorf("resource factory is required"), closeLogger())
 		}
@@ -149,6 +163,22 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource)
 	return root
+}
+
+func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeouts) *time.Duration {
+	if cmd.Parent() == nil || cmd.Parent().Name() != "resource" {
+		return nil
+	}
+	switch cmd.Name() {
+	case "list":
+		return timeouts.List
+	case "status":
+		return timeouts.Status
+	case "apply":
+		return timeouts.Apply
+	default:
+		return nil
+	}
 }
 
 func closeAfterRun(command *cobra.Command, closeLogger func() error) {

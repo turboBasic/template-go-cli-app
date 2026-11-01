@@ -20,7 +20,7 @@ func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resou
 	s.logger.DebugContext(ctx, "getting resource status")
 	resource, err := s.reader.Status(ctx, name)
 	if err != nil {
-		return domain.Resource{}, fmt.Errorf("get resource status: %w", err)
+		return domain.Resource{}, fmt.Errorf("get resource status: %w", classifyDeadline(err))
 	}
 	if err := resource.Validate(); err != nil {
 		return domain.Resource{}, fmt.Errorf("validate resource status: %w", Classify(ErrValidation, err))
@@ -33,7 +33,7 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	s.logger.DebugContext(ctx, "applying resource")
 	resource, err := s.reader.Apply(ctx, name)
 	if err != nil {
-		return domain.Resource{}, fmt.Errorf("apply resource: %w", err)
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
 	if err := resource.Validate(); err != nil {
 		return domain.Resource{}, fmt.Errorf("validate applied resource: %w", Classify(ErrValidation, err))
@@ -57,7 +57,7 @@ func (s *ResourceService) List(ctx context.Context) ([]domain.Resource, error) {
 	s.logger.DebugContext(ctx, "listing resources")
 	resources, err := s.reader.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list resources: %w", err)
+		return nil, fmt.Errorf("list resources: %w", classifyDeadline(err))
 	}
 	for i, resource := range resources {
 		if err := resource.Validate(); err != nil {

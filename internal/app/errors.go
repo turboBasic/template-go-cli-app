@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -22,4 +23,11 @@ func Classify(category, err error) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %w", category, err)
+}
+
+func classifyDeadline(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return Classify(ErrTimeout, err)
+	}
+	return err
 }

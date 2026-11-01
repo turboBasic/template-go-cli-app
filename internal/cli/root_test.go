@@ -233,6 +233,52 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	}
 }
 
+func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
+	setupConfigEnvironment(t)
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, []byte("[timeouts.resource]\nlist = '80ms'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := blockingTimeoutReader{
+		ResourceReader: memory.NewResourceReader(),
+		started:        make(chan time.Time, 1),
+		deadlines:      make(chan time.Time, 1),
+	}
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+		return app.NewResourceService(reader, logger), nil
+	}, testBuildInfo(), memory.NewResourceReader().Names())
+	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	command.SetContext(parentContext)
+	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetOut(&bytes.Buffer{})
+	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want timeout classification and context.DeadlineExceeded", err)
+	}
+	started := <-reader.started
+	deadline := <-reader.deadlines
+	if remaining := deadline.Sub(started); remaining < 50*time.Millisecond || remaining > 500*time.Millisecond {
+		t.Fatalf("adapter deadline interval = %s, want configured 80ms timeout", remaining)
+	}
+}
+
+type blockingTimeoutReader struct {
+	app.ResourceReader
+	started   chan time.Time
+	deadlines chan time.Time
+}
+
+func (r blockingTimeoutReader) List(ctx context.Context) ([]domain.Resource, error) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, errors.New("operation context has no deadline")
+	}
+	r.started <- time.Now()
+	r.deadlines <- deadline
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func durationPointer(duration time.Duration) *time.Duration { return &duration }
 
 func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
