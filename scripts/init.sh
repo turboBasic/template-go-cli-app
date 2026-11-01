@@ -12,11 +12,13 @@ IFS=$'\n\t'
 
 main() {
   local repo_root temporary_dir
-  local project_name module_path config_id
+  local project_name module_path config_id config_env_prefix
   local -a staged_paths target_paths
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
   parse_inputs "$@"
+  config_env_prefix="$(printf '%s' "$config_id" | tr '[:lower:]-' '[:upper:]_')"
+  config_env_prefix="${config_env_prefix//-/_}_"
   validate_inputs
   validate_markers "$repo_root"
   temporary_dir="$(mktemp -d "$repo_root/.init-tmp.XXXXXX")"
@@ -26,6 +28,7 @@ main() {
   install_changes
   rename_command_directory "$repo_root"
   printf 'Initialized %s (%s) with config identifier %s.\n' "$project_name" "$module_path" "$config_id"
+  exit 0
 }
 
 parse_inputs() {
@@ -79,6 +82,8 @@ validate_markers() {
   for path in "$repo_root/README.md" "$repo_root/SECURITY.md" "$repo_root/justfile" "$repo_root/docs/architecture-specification.md"; do
     require_marker_or_value "$path" 'cli-app' "$config_id"
   done
+  require_marker_or_value "$repo_root/internal/cli/root.go" 'configID = "cli-app"' "configID = \"$config_id\""
+  require_marker_or_value "$repo_root/internal/config/overlays.go" 'CLI_APP_' "$config_env_prefix"
 
   if [[ -e "$repo_root/cmd/cli-app" && -e "$repo_root/cmd/$config_id" && "$config_id" != 'cli-app' ]]; then
     printf 'Both cmd/cli-app and cmd/%s exist; refusing to overwrite either directory.\n' "$config_id" >&2
@@ -126,13 +131,24 @@ stage_go_sources() {
   local path index
 
   while IFS= read -r -d '' path; do
-    if grep -Fq -- 'github.com/turboBasic/template-go-cli-app' "$path"; then
+    if grep -Fq -- 'github.com/turboBasic/template-go-cli-app' "$path" || grep -Fq -- 'cli-app' "$path" || grep -Fq -- 'CLI_APP_' "$path"; then
       index="${#target_paths[@]}"
       staged_paths+=("$temporary_dir/$index")
       target_paths+=("$path")
-      stage_module_path_replacement "$path" "$temporary_dir/$index"
+      stage_go_source_replacements "$path" "$temporary_dir/$index"
     fi
   done < <(find "$repo_root" -type d \( -name .git -o -name vendor -o -name tmp -o -name dist \) -prune -o -type f -name '*.go' -print0)
+}
+
+stage_go_source_replacements() {
+  local source="$1"
+  local destination="$2"
+
+  sed -e 's|github\.com/turboBasic/template-go-cli-app|@TEMPLATE_MODULE_PATH@|g' \
+    -e "s|cli-app|$config_id|g" \
+    -e "s|@TEMPLATE_MODULE_PATH@|$module_path|g" \
+    -e "s|CLI_APP_|$config_env_prefix|g" \
+    "$source" > "$destination"
 }
 
 stage_module_path_replacement() {

@@ -9,6 +9,7 @@ golangci
 gomod
 jactionlint
 Koanf
+knadh
 Melnyk
 Mise
 onepassword

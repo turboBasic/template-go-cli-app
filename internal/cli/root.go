@@ -1,13 +1,21 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
+	"github.com/turboBasic/template-go-cli-app/internal/config"
 )
+
+const configID = "cli-app"
+
+// ResourceFactory builds the command's application service from effective configuration.
+type ResourceFactory func(context.Context, config.Config) (*app.ResourceService, error)
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -18,6 +26,13 @@ type BuildInfo struct {
 
 // NewRootCommand builds an independently configurable command tree.
 func NewRootCommand(resources *app.ResourceService, build BuildInfo, names []string) *cobra.Command {
+	return NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
+		return resources, nil
+	}, build, names)
+}
+
+// NewRootCommandWithFactory builds a command tree that loads config before creating application dependencies.
+func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names []string) *cobra.Command {
 	names = append([]string(nil), names...)
 	root := &cobra.Command{
 		Use:     "cli-app",
@@ -31,51 +46,73 @@ func NewRootCommand(resources *app.ResourceService, build BuildInfo, names []str
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
-	var config, logLevel, output, color string
+	var configPath, logLevel, output, color string
 	var quiet bool
 	flags := root.PersistentFlags()
-	flags.StringVar(&config, "config", "", "configuration file path")
+	flags.StringVar(&configPath, "config", "", "configuration file path")
 	flags.StringVar(&logLevel, "log-level", "warn", "logging level (debug, info, warn, error)")
 	flags.StringVar(&output, "output", "text", "result format (text, json)")
 	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
-	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
-		if !oneOf(logLevel, "debug", "info", "warn", "error") {
-			return fmt.Errorf("invalid --log-level %q: must be debug, info, warn, or error", logLevel)
+	var resources *app.ResourceService
+	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		resources = nil
+		if isHelpOrCompletion(cmd) {
+			return nil
 		}
-		if !oneOf(output, "text", "json") {
-			return fmt.Errorf("invalid --output %q: must be text or json", output)
+		workingDir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("find working directory: %w", err)
 		}
-		if !oneOf(color, "auto", "always", "never") {
-			return fmt.Errorf("invalid --color %q: must be auto, always, or never", color)
+		files, err := config.DiscoverFiles(workingDir, configID, configPath)
+		if err != nil {
+			return err
 		}
-		if output == "json" && color == "always" {
-			return fmt.Errorf("--color always cannot be used with --output json")
+		flagValues := map[string]config.FlagValue{
+			"log-level": {Value: logLevel, Changed: flags.Lookup("log-level").Changed, Source: "--log-level"},
+			"output":    {Value: output, Changed: flags.Lookup("output").Changed, Source: "--output"},
+			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
+			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
+		}
+		loaded, err := config.Load(files, flagValues)
+		if err != nil {
+			return err
+		}
+		if factory == nil {
+			return fmt.Errorf("resource factory is required")
+		}
+		resources, err = factory(cmd.Context(), loaded.Config)
+		if err != nil {
+			return fmt.Errorf("create application dependencies: %w", err)
+		}
+		if resources == nil {
+			return fmt.Errorf("resource factory returned no service")
 		}
 		return nil
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
-	resource.AddCommand(newResourceListCommand(resources), newResourceStatusCommand(resources, names), newResourceApplyCommand(resources, names))
+	getResources := func() *app.ResourceService { return resources }
+	resource.AddCommand(newResourceListCommand(getResources), newResourceStatusCommand(getResources, names), newResourceApplyCommand(getResources, names))
 	root.AddCommand(resource)
 	return root
 }
 
-func oneOf(value string, choices ...string) bool {
-	for _, choice := range choices {
-		if value == choice {
+func isHelpOrCompletion(cmd *cobra.Command) bool {
+	for current := cmd; current != nil; current = current.Parent() {
+		if current.Name() == "help" || current.Name() == "completion" || strings.HasPrefix(current.Name(), "__complete") {
 			return true
 		}
 	}
 	return false
 }
 
-func newResourceListCommand(resources *app.ResourceService) *cobra.Command {
+func newResourceListCommand(getResources func() *app.ResourceService) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List resources",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			items, err := resources.List(cmd.Context())
+			items, err := getResources().List(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -96,14 +133,14 @@ func newResourceListCommand(resources *app.ResourceService) *cobra.Command {
 	}
 }
 
-func newResourceStatusCommand(resources *app.ResourceService, names []string) *cobra.Command {
+func newResourceStatusCommand(getResources func() *app.ResourceService, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "status <name>",
 		Short:             "Show a resource status",
 		Args:              validateResourceName(names),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resource, err := resources.Status(cmd.Context(), args[0])
+			resource, err := getResources().Status(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -115,14 +152,14 @@ func newResourceStatusCommand(resources *app.ResourceService, names []string) *c
 	}
 }
 
-func newResourceApplyCommand(resources *app.ResourceService, names []string) *cobra.Command {
+func newResourceApplyCommand(getResources func() *app.ResourceService, names []string) *cobra.Command {
 	return &cobra.Command{
 		Use:               "apply <name>",
 		Short:             "Apply a resource",
 		Args:              validateResourceName(names),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resource, err := resources.Apply(cmd.Context(), args[0])
+			resource, err := getResources().Apply(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}

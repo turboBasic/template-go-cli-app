@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime/debug"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
+	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
 )
 
@@ -16,8 +18,9 @@ var buildDate = "unknown"
 
 func main() {
 	resources := memory.NewResourceReader()
-	service := app.NewResourceService(resources)
-	command := cli.NewRootCommand(service, buildInfo(), resources.Names())
+	command := cli.NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
+		return app.NewResourceService(memory.NewResourceReader()), nil
+	}, buildInfo(), resources.Names())
 	if err := command.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
