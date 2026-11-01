@@ -34,10 +34,6 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
-	s.reportProgress(ProgressEvent{Phase: "validating", Message: "Validating resource"})
-	if err := ctx.Err(); err != nil {
-		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
-	}
 	s.reportProgress(ProgressEvent{Phase: "applying", Message: "Applying resource"})
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
@@ -46,6 +42,10 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	if err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
+	s.reportProgress(ProgressEvent{Phase: "validating", Message: "Validating resource"})
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}

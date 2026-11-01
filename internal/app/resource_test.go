@@ -71,8 +71,8 @@ func TestResourceServiceApplyReportsProgress(t *testing.T) {
 		t.Fatalf("Apply() = (%#v, %v), want (%#v, nil)", got, err, wantResource)
 	}
 	wantEvents := []ProgressEvent{
-		{Phase: "validating", Message: "Validating resource"},
 		{Phase: "applying", Message: "Applying resource"},
+		{Phase: "validating", Message: "Validating resource"},
 		{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"},
 	}
 	if !reflect.DeepEqual(gotEvents, wantEvents) {
@@ -88,7 +88,6 @@ func TestResourceServiceApplyDoesNotReportCompletionAfterFailure(t *testing.T) {
 		t.Fatalf("Apply() error = %v, want wrapped %v", err, wantErr)
 	}
 	if got, want := gotEvents, []ProgressEvent{
-		{Phase: "validating", Message: "Validating resource"},
 		{Phase: "applying", Message: "Applying resource"},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("progress events = %#v, want %#v", got, want)
@@ -96,7 +95,7 @@ func TestResourceServiceApplyDoesNotReportCompletionAfterFailure(t *testing.T) {
 }
 
 func TestResourceServiceApplyChecksCancellationBetweenReportedPhases(t *testing.T) {
-	for _, cancelPhase := range []string{"validating", "applying"} {
+	for _, cancelPhase := range []string{"applying", "validating"} {
 		t.Run(cancelPhase, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -115,12 +114,16 @@ func TestResourceServiceApplyChecksCancellationBetweenReportedPhases(t *testing.
 			if _, err := service.Apply(ctx, "example-1"); !errors.Is(err, context.Canceled) {
 				t.Fatalf("Apply() error = %v, want context cancellation", err)
 			}
-			wantEvents := []ProgressEvent{{Phase: "validating", Message: "Validating resource"}}
-			if cancelPhase == "applying" {
-				wantEvents = append(wantEvents, ProgressEvent{Phase: "applying", Message: "Applying resource"})
+			wantEvents := []ProgressEvent{{Phase: "applying", Message: "Applying resource"}}
+			if cancelPhase == "validating" {
+				wantEvents = append(wantEvents, ProgressEvent{Phase: "validating", Message: "Validating resource"})
 			}
-			if !reflect.DeepEqual(gotEvents, wantEvents) || applyCalls != 0 {
-				t.Fatalf("progress events = %#v, apply calls = %d; want %#v and 0 calls", gotEvents, applyCalls, wantEvents)
+			wantApplyCalls := 0
+			if cancelPhase == "validating" {
+				wantApplyCalls = 1
+			}
+			if !reflect.DeepEqual(gotEvents, wantEvents) || applyCalls != wantApplyCalls {
+				t.Fatalf("progress events = %#v, apply calls = %d; want %#v and %d calls", gotEvents, applyCalls, wantEvents, wantApplyCalls)
 			}
 		})
 	}
@@ -138,7 +141,7 @@ func TestResourceServiceApplyDoesNotReportCompletionAfterCancellation(t *testing
 	if _, err := service.Apply(ctx, "example-1"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Apply() error = %v, want context cancellation", err)
 	}
-	if len(gotEvents) != 2 || gotEvents[1].Phase != "applying" {
+	if len(gotEvents) != 1 || gotEvents[0].Phase != "applying" {
 		t.Fatalf("progress events = %#v, want no completion after cancellation", gotEvents)
 	}
 }

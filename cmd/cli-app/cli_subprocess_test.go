@@ -40,7 +40,7 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	}{Name: "example-1", Status: "ready"}) {
 		t.Fatalf("applied JSON = %q (decode error %v), want the existing resource result shape", stdout, err)
 	}
-	if code != 0 || stderr != "validating: Validating resource\napplying: Applying resource\ncomplete: Resource applied (1/1)\n" {
+	if code != 0 || stderr != "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n" {
 		t.Fatalf("apply JSON command = stderr %q, exit %d; want stable progress on stderr and exit 0", stderr, code)
 	}
 }

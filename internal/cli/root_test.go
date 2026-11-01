@@ -455,7 +455,7 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 		quiet bool
 		want  string
 	}{
-		{name: "progress to redirected stderr", want: "validating: Validating resource\napplying: Applying resource\ncomplete: Resource applied (1/1)\n"},
+		{name: "progress to redirected stderr", want: "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"},
 		{name: "quiet suppresses progress", quiet: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
