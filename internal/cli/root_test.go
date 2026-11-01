@@ -502,6 +502,26 @@ func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
 	}
 }
 
+func TestProgressWriterErrorsDoNotReplaceApplyResult(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader := memory.NewResourceReader()
+	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+	command.SetArgs([]string{"--output", "json", "resource", "apply", "example-1"})
+	var stdout bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(failingWriter{err: errors.New("injected progress write failure")})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, want successful operation despite progress write failure", err)
+	}
+	var result map[string]string
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout = %q, want JSON result: %v", stdout.String(), err)
+	}
+	if len(result) != 2 || result["name"] != "example-1" || result["status"] != "ready" {
+		t.Fatalf("JSON result = %#v, want unwrapped applied resource", result)
+	}
+}
+
 func TestRendererWriteErrorsAreReturned(t *testing.T) {
 	wantErr := errors.New("injected write failure")
 	for _, format := range []string{"text", "json"} {
