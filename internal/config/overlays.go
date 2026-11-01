@@ -37,7 +37,7 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		if !ok || !strings.HasPrefix(name, "CLI_APP_") {
 			continue
 		}
-		key := strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
+		key := environmentKey(name)
 		parsed, known, err := parseOverlayValue(key, value, schema)
 		if !known {
 			continue
@@ -45,20 +45,24 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read environment variable %s: %w", name, err)
 		}
-		mergeLayer(result.values, map[string]any{key: parsed}, Source(name), result.Sources)
+		mergeLayer(result.values, nestedValue(key, parsed), Source(name), result.Sources)
 	}
 	for key, flag := range flags {
 		if !flag.Changed {
 			continue
 		}
-		parsed, known, err := parseFlagValue(key, flag.Value, schema)
+		target := key
+		if target == "log-level" {
+			target = "log.console.level"
+		}
+		parsed, known, err := parseFlagValue(target, flag.Value, schema)
 		if !known {
 			continue
 		}
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read flag %s: %w", flagSource(key, flag), err)
 		}
-		mergeLayer(result.values, map[string]any{key: parsed}, Source(flagSource(key, flag)), result.Sources)
+		mergeLayer(result.values, nestedValue(target, parsed), Source(flagSource(key, flag)), result.Sources)
 	}
 	if err := resolvePaths(result.values, result.Sources, workingDir, schema); err != nil {
 		return LoadResult{}, err
@@ -68,6 +72,30 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		return LoadResult{}, fmt.Errorf("decode effective configuration: %w", err)
 	}
 	return result, nil
+}
+
+func environmentKey(name string) string {
+	switch name {
+	case "CLI_APP_LOG_LEVEL":
+		return "log.console.level"
+	case "CLI_APP_LOG_CONSOLE_LEVEL":
+		return "log.console.level"
+	case "CLI_APP_LOG_FILE_LEVEL":
+		return "log.file.level"
+	case "CLI_APP_LOG_FILE_PATH":
+		return "log.file.path"
+	default:
+		return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
+	}
+}
+
+func nestedValue(key string, value any) map[string]any {
+	parts := strings.Split(key, ".")
+	result := map[string]any{parts[len(parts)-1]: value}
+	for i := len(parts) - 2; i >= 0; i-- {
+		result = map[string]any{parts[i]: result}
+	}
+	return result
 }
 
 func parseOverlayValue(key, value string, schema map[string]valueType) (any, bool, error) {

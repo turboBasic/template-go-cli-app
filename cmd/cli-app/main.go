@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime/debug"
 
@@ -18,8 +19,8 @@ var buildDate = "unknown"
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
-		return app.NewResourceService(memory.NewResourceReader()), nil
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+		return app.NewResourceService(resources, logger), nil
 	}, buildInfo(), resources.Names())
 	if err := command.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

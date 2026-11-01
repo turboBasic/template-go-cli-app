@@ -10,9 +10,11 @@ const (
 
 func productionSchema() map[string]valueType {
 	return map[string]valueType{
-		"log-level": stringValue,
-		"output":    stringValue,
-		"color":     stringValue,
-		"quiet":     booleanValue,
+		"log.console.level": stringValue,
+		"log.file.level":    stringValue,
+		"log.file.path":     pathValue,
+		"output":            stringValue,
+		"color":             stringValue,
+		"quiet":             booleanValue,
 	}
 }

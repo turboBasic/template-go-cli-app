@@ -1,0 +1,6 @@
+[log.console]
+level = "debug"
+
+[log.file]
+path = "logs/cli-app.jsonl"
+level = "debug"

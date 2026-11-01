@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -10,12 +12,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 const configID = "cli-app"
 
 // ResourceFactory builds the command's application service from effective configuration.
-type ResourceFactory func(context.Context, config.Config) (*app.ResourceService, error)
+type ResourceFactory func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error)
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -25,9 +28,9 @@ type BuildInfo struct {
 }
 
 // NewRootCommand builds an independently configurable command tree.
-func NewRootCommand(resources *app.ResourceService, build BuildInfo, names []string) *cobra.Command {
-	return NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
-		return resources, nil
+func NewRootCommand(reader app.ResourceReader, build BuildInfo, names []string) *cobra.Command {
+	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+		return app.NewResourceService(reader, logger), nil
 	}, build, names)
 }
 
@@ -55,7 +58,22 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	var resources *app.ResourceService
+	var logResult logging.Result
+	closeLogger := func() error {
+		if logResult.Close == nil {
+			return nil
+		}
+		close := logResult.Close
+		logResult.Close = nil
+		if err := close(); err != nil {
+			return fmt.Errorf("close logger: %w", err)
+		}
+		return nil
+	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if err := closeLogger(); err != nil {
+			return err
+		}
 		resources = nil
 		if isHelpOrCompletion(cmd) {
 			return nil
@@ -78,23 +96,43 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if err != nil {
 			return err
 		}
-		if factory == nil {
-			return fmt.Errorf("resource factory is required")
-		}
-		resources, err = factory(cmd.Context(), loaded.Config)
+		logResult, err = logging.New(loaded.Config.Log)
 		if err != nil {
-			return fmt.Errorf("create application dependencies: %w", err)
+			return fmt.Errorf("initialize logging: %w", err)
+		}
+		if factory == nil {
+			return errors.Join(fmt.Errorf("resource factory is required"), closeLogger())
+		}
+		resources, err = factory(cmd.Context(), loaded.Config, logResult.Logger)
+		if err != nil {
+			return errors.Join(fmt.Errorf("create application dependencies: %w", err), closeLogger())
 		}
 		if resources == nil {
-			return fmt.Errorf("resource factory returned no service")
+			return errors.Join(fmt.Errorf("resource factory returned no service"), closeLogger())
 		}
 		return nil
 	}
+	root.PersistentPostRunE = func(*cobra.Command, []string) error {
+		return closeLogger()
+	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
 	getResources := func() *app.ResourceService { return resources }
-	resource.AddCommand(newResourceListCommand(getResources), newResourceStatusCommand(getResources, names), newResourceApplyCommand(getResources, names))
+	list := newResourceListCommand(getResources)
+	status := newResourceStatusCommand(getResources, names)
+	apply := newResourceApplyCommand(getResources, names)
+	closeAfterRun(list, closeLogger)
+	closeAfterRun(status, closeLogger)
+	closeAfterRun(apply, closeLogger)
+	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource)
 	return root
+}
+
+func closeAfterRun(command *cobra.Command, closeLogger func() error) {
+	run := command.RunE
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		return errors.Join(run(cmd, args), closeLogger())
+	}
 }
 
 func isHelpOrCompletion(cmd *cobra.Command) bool {

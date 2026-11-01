@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 )
@@ -16,6 +17,7 @@ type ResourceReader interface {
 
 // Status returns the named resource and its current status.
 func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resource, error) {
+	s.logger.DebugContext(ctx, "getting resource status")
 	resource, err := s.reader.Status(ctx, name)
 	if err != nil {
 		return domain.Resource{}, fmt.Errorf("get resource status: %w", err)
@@ -28,6 +30,7 @@ func (s *ResourceService) Status(ctx context.Context, name string) (domain.Resou
 
 // Apply applies the named resource and returns its updated state.
 func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resource, error) {
+	s.logger.DebugContext(ctx, "applying resource")
 	resource, err := s.reader.Apply(ctx, name)
 	if err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", err)
@@ -41,15 +44,17 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 // ResourceService coordinates resource use cases.
 type ResourceService struct {
 	reader ResourceReader
+	logger *slog.Logger
 }
 
-// NewResourceService constructs a resource service with its required reader.
-func NewResourceService(reader ResourceReader) *ResourceService {
-	return &ResourceService{reader: reader}
+// NewResourceService constructs a resource service with its required reader and logger.
+func NewResourceService(reader ResourceReader, logger *slog.Logger) *ResourceService {
+	return &ResourceService{reader: reader, logger: logger}
 }
 
 // List returns the resources supplied by the configured reader.
 func (s *ResourceService) List(ctx context.Context) ([]domain.Resource, error) {
+	s.logger.DebugContext(ctx, "listing resources")
 	resources, err := s.reader.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list resources: %w", err)

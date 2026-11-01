@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
+	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
 )
 
@@ -150,16 +155,18 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
-	if err := os.WriteFile(configFile, []byte("log-level = 'info'\noutput = 'json'\nquiet = true\n"), 0o600); err != nil {
+	if err := os.WriteFile(configFile, []byte("output = 'json'\nquiet = true\n[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
 	var got config.Config
+	var gotLogger *slog.Logger
 	factoryCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, error) {
 		factoryCalls++
 		got = effective
-		return app.NewResourceService(reader), nil
+		gotLogger = logger
+		return app.NewResourceService(reader, logger), nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list"})
 	var output bytes.Buffer
@@ -168,19 +175,169 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	want := config.Config{LogLevel: "debug", Output: "json", Color: "never", Quiet: true}
+	want := config.Config{
+		LogLevel: "debug",
+		Log:      config.LogConfig{Console: config.ConsoleLogConfig{Level: "debug"}, File: config.FileLogConfig{Level: "debug"}},
+		Output:   "json",
+		Color:    "never",
+		Quiet:    true,
+	}
 	if got != want {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
 	}
 	if factoryCalls != 1 || !strings.Contains(output.String(), "example-1") {
 		t.Fatalf("factory calls/output = %d/%q, want one call before resource execution", factoryCalls, output.String())
 	}
+	if gotLogger == nil {
+		t.Fatal("factory logger = nil, want initialized logger")
+	}
+}
+
+func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
+	setupConfigEnvironment(t)
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, []byte("[log.file]\npath = 'missing/app.jsonl'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	factoryCalls := 0
+	reader := memory.NewResourceReader()
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+		factoryCalls++
+		return app.NewResourceService(reader, logger), nil
+	}, testBuildInfo(), reader.Names())
+	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "open log file") {
+		t.Fatalf("Execute() error = %v, want log file initialization error", err)
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("factory calls = %d, want zero on logging initialization failure", factoryCalls)
+	}
+}
+
+func TestLoggerStaysOffCommandOutput(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousStderr := os.Stderr
+	os.Stderr = writer
+	commandReader := memory.NewResourceReader()
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+		return app.NewResourceService(commandReader, logger), nil
+	}, testBuildInfo(), commandReader.Names())
+	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
+	var stdout bytes.Buffer
+	command.SetOut(&stdout)
+	executeErr := command.Execute()
+	os.Stderr = previousStderr
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stderr, readErr := io.ReadAll(reader)
+	_ = reader.Close()
+	if executeErr != nil {
+		t.Fatal(executeErr)
+	}
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !strings.Contains(stdout.String(), "example-1") || strings.Contains(stdout.String(), "listing resources") {
+		t.Fatalf("command output = %q, want result only", stdout.String())
+	}
+	if !strings.Contains(string(stderr), "listing resources") || strings.Contains(string(stderr), "example-1") {
+		t.Fatalf("diagnostics = %q, want log record only", stderr)
+	}
+}
+
+func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
+	for _, failCommand := range []bool{false, true} {
+		name := "success"
+		if failCommand {
+			name = "command error"
+		}
+		t.Run(name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			root := t.TempDir()
+			if err := os.Mkdir(filepath.Join(root, "logs"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			fixture, err := os.ReadFile("testdata/log-file.toml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(root, "settings.toml")
+			if err := os.WriteFile(configPath, fixture, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			reader := app.ResourceReader(memory.NewResourceReader())
+			if failCommand {
+				reader = failingResourceReader{}
+			}
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+				return app.NewResourceService(reader, logger), nil
+			}, testBuildInfo(), memory.NewResourceReader().Names())
+			command.SetArgs([]string{"--config", configPath, "resource", "list"})
+			command.SetOut(&bytes.Buffer{})
+			err = command.Execute()
+			if failCommand && (err == nil || !strings.Contains(err.Error(), "injected reader failure")) {
+				t.Fatalf("Execute() error = %v, want injected reader error", err)
+			}
+			if !failCommand && err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+
+			logPath := filepath.Join(root, "logs", "cli-app.jsonl")
+			file, err := os.Open(logPath)
+			if err != nil {
+				t.Fatalf("open source-relative log file: %v", err)
+			}
+			scanner := bufio.NewScanner(file)
+			var records int
+			for scanner.Scan() {
+				var record map[string]any
+				if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+					t.Fatalf("JSONL record %q: %v", scanner.Text(), err)
+				}
+				if record["msg"] != "listing resources" {
+					t.Errorf("log record = %#v, want application debug record", record)
+				}
+				records++
+			}
+			if err := scanner.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if records != 1 {
+				t.Fatalf("JSONL records = %d, want 1", records)
+			}
+			if err := os.Remove(logPath); err != nil {
+				t.Fatalf("remove closed log file: %v", err)
+			}
+		})
+	}
+}
+
+type failingResourceReader struct{}
+
+func (failingResourceReader) List(context.Context) ([]domain.Resource, error) {
+	return nil, errors.New("injected reader failure")
+}
+
+func (failingResourceReader) Status(context.Context, string) (domain.Resource, error) {
+	return domain.Resource{}, errors.New("injected reader failure")
+}
+
+func (failingResourceReader) Apply(context.Context, string) (domain.Resource, error) {
+	return domain.Resource{}, errors.New("injected reader failure")
 }
 
 func TestFactoryErrorPropagates(t *testing.T) {
 	setupConfigEnvironment(t)
 	wantErr := errors.New("factory failure")
-	command := NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error) {
 		return nil, wantErr
 	}, testBuildInfo(), nil)
 	command.SetArgs([]string{"resource", "list"})
@@ -198,7 +355,7 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config) (*app.ResourceService, error) {
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error) {
 				factoryCalls++
 				return nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
@@ -221,17 +378,17 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	firstConfig := filepath.Join(t.TempDir(), "first.toml")
 	secondConfig := filepath.Join(t.TempDir(), "second.toml")
-	if err := os.WriteFile(firstConfig, []byte("log-level = 'info'\n"), 0o600); err != nil {
+	if err := os.WriteFile(firstConfig, []byte("[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(secondConfig, []byte("log-level = 'error'\n"), 0o600); err != nil {
+	if err := os.WriteFile(secondConfig, []byte("[log.console]\nlevel = 'error'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, error) {
 		configs = append(configs, effective)
-		return app.NewResourceService(reader), nil
+		return app.NewResourceService(reader, logger), nil
 	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
 		command.SetArgs([]string{"--config", path, "resource", "list"})
@@ -270,5 +427,5 @@ func newTestRootCommand(t *testing.T) *cobra.Command {
 		t.Setenv(name, value)
 	}
 	reader := memory.NewResourceReader()
-	return NewRootCommand(app.NewResourceService(reader), testBuildInfo(), reader.Names())
+	return NewRootCommand(reader, testBuildInfo(), reader.Names())
 }
