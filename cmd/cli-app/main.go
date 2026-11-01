@@ -31,7 +31,7 @@ var (
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		var reader app.ResourceReader = resources
 		if configured := effective.Retry.Resource.Status; configured != nil {
 			policy := &retry.Policy{
@@ -46,7 +46,7 @@ func main() {
 			}
 			reader = retryingReader
 		}
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, buildInfo(), resources.Names())
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
 		command.SetContext(ctx)

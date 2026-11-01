@@ -197,11 +197,11 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	var got config.Config
 	var gotLogger *slog.Logger
 	factoryCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
 		got = effective
 		gotLogger = logger
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list", "--timeout", "2m"})
 	var output bytes.Buffer
@@ -244,8 +244,8 @@ func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 		started:        make(chan time.Time, 1),
 		deadlines:      make(chan time.Time, 1),
 	}
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), nil, nil
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -287,11 +287,11 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 				cleanupDeadline, _ = ctx.Deadline()
 				return nil
 			}
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				if test.setupFailure {
 					return nil, cleanup, errors.New("injected setup failure")
 				}
-				return app.NewResourceService(reader, logger), cleanup, nil
+				return app.NewResourceService(reader, logger, progressReporter), cleanup, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"resource", "list"})
 			command.SetOut(&bytes.Buffer{})
@@ -331,8 +331,8 @@ func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *t
 	}
 	cleanupContext := make(chan cleanupContextState, 1)
 	cleanupCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(reader, logger), func(ctx context.Context) error {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), func(ctx context.Context) error {
 			cleanupCalls++
 			deadline, bounded := ctx.Deadline()
 			cleanupContext <- cleanupContextState{err: ctx.Err(), deadline: deadline, bounded: bounded}
@@ -386,9 +386,9 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	}
 	factoryCalls := 0
 	reader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "resource", "list"})
 	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "open log file") {
@@ -408,8 +408,8 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	previousStderr := os.Stderr
 	os.Stderr = writer
 	commandReader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(commandReader, logger), nil, nil
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(commandReader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), commandReader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
 	var stdout bytes.Buffer
@@ -446,6 +446,79 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	}
 	if progress.String() != "progress update\n" || strings.Contains(stdout.String(), "progress update") {
 		t.Fatalf("progress = %q, stdout = %q; want progress on stderr only", progress.String(), stdout.String())
+	}
+}
+
+func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		quiet bool
+		want  string
+	}{
+		{name: "progress to redirected stderr", want: "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"},
+		{name: "quiet suppresses progress", quiet: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			command := NewRootCommand(memory.NewResourceReader(), testBuildInfo(), memory.NewResourceReader().Names())
+			args := []string{"--output", "json"}
+			if test.quiet {
+				args = append(args, "--quiet")
+			}
+			args = append(args, "resource", "apply", "example-1")
+			command.SetArgs(args)
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var result map[string]string
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("stdout = %q, want JSON result: %v", stdout.String(), err)
+			}
+			if len(result) != 2 || result["name"] != "example-1" || result["status"] != "ready" {
+				t.Fatalf("JSON result = %#v, want unwrapped resource result", result)
+			}
+			if got := stderr.String(); got != test.want {
+				t.Fatalf("stderr = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
+	setupConfigEnvironment(t)
+	command := NewRootCommand(failingResourceReader{}, testBuildInfo(), memory.NewResourceReader().Names())
+	command.SetArgs([]string{"--quiet", "resource", "apply", "example-1"})
+	var stdout, stderr bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "injected reader failure") {
+		t.Fatalf("Execute() error = %v, want injected reader failure", err)
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("stdout/stderr = %q/%q, want no partial result or progress", stdout.String(), stderr.String())
+	}
+}
+
+func TestProgressWriterErrorsDoNotReplaceApplyResult(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader := memory.NewResourceReader()
+	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+	command.SetArgs([]string{"--output", "json", "resource", "apply", "example-1"})
+	var stdout bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(failingWriter{err: errors.New("injected progress write failure")})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v, want successful operation despite progress write failure", err)
+	}
+	var result map[string]string
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout = %q, want JSON result: %v", stdout.String(), err)
+	}
+	if len(result) != 2 || result["name"] != "example-1" || result["status"] != "ready" {
+		t.Fatalf("JSON result = %#v, want unwrapped applied resource", result)
 	}
 }
 
@@ -487,8 +560,8 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 			if failCommand {
 				reader = failingResourceReader{}
 			}
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
-				return app.NewResourceService(reader, logger), nil, nil
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				return app.NewResourceService(reader, logger, progressReporter), nil, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"--config", configPath, "resource", "list"})
 			command.SetOut(&bytes.Buffer{})
@@ -554,7 +627,7 @@ func (failingResourceReader) Apply(context.Context, string) (domain.Resource, er
 func TestFactoryErrorPropagates(t *testing.T) {
 	setupConfigEnvironment(t)
 	wantErr := errors.New("factory failure")
-	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return nil, nil, wantErr
 	}, testBuildInfo(), nil)
 	command.SetArgs([]string{"resource", "list"})
@@ -572,7 +645,7 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				factoryCalls++
 				return nil, nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
@@ -603,9 +676,9 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		configs = append(configs, effective)
-		return app.NewResourceService(reader, logger), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
 		command.SetArgs([]string{"--config", path, "resource", "list"})

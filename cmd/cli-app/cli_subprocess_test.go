@@ -32,6 +32,17 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	if code != 0 || stderr != "" {
 		t.Fatalf("successful JSON command = stderr %q, exit %d; want empty stderr and exit 0", stderr, code)
 	}
+
+	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "example-1", "--output", "json")
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil || result != (struct {
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}{Name: "example-1", Status: "ready"}) {
+		t.Fatalf("applied JSON = %q (decode error %v), want the existing resource result shape", stdout, err)
+	}
+	if code != 0 || stderr != "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n" {
+		t.Fatalf("apply JSON command = stderr %q, exit %d; want stable progress on stderr and exit 0", stderr, code)
+	}
 }
 
 func buildCLIProcess(t *testing.T) string {

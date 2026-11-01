@@ -28,4 +28,7 @@ Not saved.
 
 ## Links
 
-No issue.
+- [S1-07 — Execution lifecycle and error handling (#12)](https://github.com/turboBasic/template-go-cli-app/issues/12)
+- [S1-08 — Semantic progress reporting (#36)](https://github.com/turboBasic/template-go-cli-app/issues/36)
+- [S2-03 — Animated progress with safe degradation (#17)](https://github.com/turboBasic/template-go-cli-app/issues/17)
+- [S3-01 — Concurrent and nested progress coordination (#21)](https://github.com/turboBasic/template-go-cli-app/issues/21)
