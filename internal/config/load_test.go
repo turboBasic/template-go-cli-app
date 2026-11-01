@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestLoadFilesPrecedenceAndSources(t *testing.T) {
@@ -22,7 +23,7 @@ func TestLoadFilesPrecedenceAndSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Config{LogLevel: "error", Log: LogConfig{Console: ConsoleLogConfig{Level: "error"}, File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: false}); got.Config != want {
+	if want := (Config{LogLevel: "error", Log: LogConfig{Console: ConsoleLogConfig{Level: "error"}, File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: false, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}}); got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
 	for key, want := range map[string]Source{

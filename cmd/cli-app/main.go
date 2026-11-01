@@ -2,36 +2,130 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
+	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
+	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
 var version = "dev"
 var commit = "unknown"
 var buildDate = "unknown"
 
+var (
+	errInterruptSignal = errors.New("interrupted by SIGINT")
+	errTerminateSignal = errors.New("terminated by SIGTERM")
+)
+
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
-		return app.NewResourceService(resources, logger), nil
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		var reader app.ResourceReader = resources
+		if configured := effective.Retry.Resource.Status; configured != nil {
+			policy := &retry.Policy{
+				MaxAttempts:  configured.MaxAttempts,
+				InitialDelay: configured.InitialDelay,
+				MaxDelay:     configured.MaxDelay,
+				Jitter:       configured.Jitter,
+			}
+			retryingReader, err := retry.NewResourceReader(reader, policy, retry.RealClock{}, retry.NewRandomSource(time.Now().UnixNano()))
+			if err != nil {
+				return nil, nil, fmt.Errorf("configure status retries: %w", err)
+			}
+			reader = retryingReader
+		}
+		return app.NewResourceService(reader, logger), nil, nil
 	}, buildInfo(), resources.Names())
-	os.Exit(execute(command.Execute, os.Stderr))
+	exitWithCode(executeWithSignals(func(ctx context.Context) error {
+		command.SetContext(ctx)
+		return runCommand(command)
+	}, os.Stderr))
+}
+
+func exitWithCode(code int) { os.Exit(code) }
+
+func runCommand(command *cobra.Command) error {
+	selected, err := command.ExecuteC()
+	if err != nil && selected != nil && !selected.Runnable() {
+		return app.Classify(app.ErrValidation, err)
+	}
+	return err
 }
 
 func execute(run func() error, stderr io.Writer) int {
 	if err := run(); err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
-		return 1
+		return exitCode(err)
 	}
 	return 0
+}
+
+func executeWithSignals(run func(context.Context) error, stderr io.Writer) int {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(context.Canceled)
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	result := make(chan int, 1)
+	go func() {
+		result <- execute(func() error {
+			err := run(ctx)
+			if cause := context.Cause(ctx); cause != nil {
+				err = errors.Join(err, cause)
+			}
+			return err
+		}, stderr)
+	}()
+	select {
+	case code := <-result:
+		return code
+	case first := <-signals:
+		cancel(signalCause(first))
+		select {
+		case code := <-result:
+			return code
+		case second := <-signals:
+			return exitCode(signalCause(second))
+		}
+	}
+}
+
+func exitCode(err error) int {
+	switch {
+	case errors.Is(err, errInterruptSignal):
+		return 130
+	case errors.Is(err, errTerminateSignal):
+		return 143
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, app.ErrTimeout):
+		return 124
+	case errors.Is(err, app.ErrValidation):
+		return 2
+	default:
+		return 1
+	}
+}
+
+func signalCause(signal os.Signal) error {
+	switch signal {
+	case os.Interrupt:
+		return errInterruptSignal
+	case syscall.SIGTERM:
+		return errTerminateSignal
+	default:
+		return fmt.Errorf("unexpected termination signal %s", signal)
+	}
 }
 
 func buildInfo() cli.BuildInfo {

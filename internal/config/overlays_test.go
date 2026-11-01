@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadFullPrecedence(t *testing.T) {
@@ -25,7 +26,7 @@ func TestLoadFullPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{LogLevel: "debug", Log: LogConfig{Console: ConsoleLogConfig{Level: "debug"}, File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: true}
+	want := Config{LogLevel: "debug", Log: LogConfig{Console: ConsoleLogConfig{Level: "debug"}, File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: true, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}}
 	if got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
@@ -74,6 +75,35 @@ func TestLoadNestedLoggingEnvironment(t *testing.T) {
 	}
 	if filepath.Base(got.Config.Log.File.Path) != "log.jsonl" || got.Sources["log.file.path"] != "CLI_APP_LOG_FILE_PATH" {
 		t.Fatalf("file path/source = %q/%q, want working-directory path from CLI_APP_LOG_FILE_PATH", got.Config.Log.File.Path, got.Sources["log.file.path"])
+	}
+}
+
+func TestLoadOperationTimeoutEnvironment(t *testing.T) {
+	got, err := load(ConfigFiles{}, []string{
+		"CLI_APP_TIMEOUTS_RESOURCE_STATUS=90s",
+		"CLI_APP_TIMEOUTS_CLEANUP=3s",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Config.Timeouts.Resource.Status == nil || *got.Config.Timeouts.Resource.Status != 90*time.Second || got.Config.Timeouts.Cleanup != 3*time.Second {
+		t.Fatalf("timeouts = %+v, want status 90s and cleanup 3s", got.Config.Timeouts)
+	}
+}
+
+func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
+	got, err := load(ConfigFiles{}, []string{
+		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_ATTEMPTS=4",
+		"CLI_APP_RETRY_RESOURCE_STATUS_INITIAL_DELAY=25ms",
+		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_DELAY=2s",
+		"CLI_APP_RETRY_RESOURCE_STATUS_JITTER=0.3",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
+	if got.Config.Retry.Resource.Status == nil || *got.Config.Retry.Resource.Status != *want {
+		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Resource.Status, want)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // FlagValue describes a registered flag's current value and changed state.
@@ -84,6 +85,22 @@ func environmentKey(name string) string {
 		return "log.file.level"
 	case "CLI_APP_LOG_FILE_PATH":
 		return "log.file.path"
+	case "CLI_APP_TIMEOUTS_CLEANUP":
+		return "timeouts.cleanup"
+	case "CLI_APP_TIMEOUTS_RESOURCE_LIST":
+		return "timeouts.resource.list"
+	case "CLI_APP_TIMEOUTS_RESOURCE_STATUS":
+		return "timeouts.resource.status"
+	case "CLI_APP_TIMEOUTS_RESOURCE_APPLY":
+		return "timeouts.resource.apply"
+	case "CLI_APP_RETRY_RESOURCE_STATUS_MAX_ATTEMPTS":
+		return "retry.resource.status.max_attempts"
+	case "CLI_APP_RETRY_RESOURCE_STATUS_INITIAL_DELAY":
+		return "retry.resource.status.initial_delay"
+	case "CLI_APP_RETRY_RESOURCE_STATUS_MAX_DELAY":
+		return "retry.resource.status.max_delay"
+	case "CLI_APP_RETRY_RESOURCE_STATUS_JITTER":
+		return "retry.resource.status.jitter"
 	default:
 		return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
 	}
@@ -106,6 +123,24 @@ func parseOverlayValue(key, value string, schema map[string]valueType) (any, boo
 	switch kind {
 	case stringValue, pathValue:
 		return value, true, nil
+	case durationValue:
+		parsed, err := time.ParseDuration(value)
+		if err != nil {
+			return nil, true, fmt.Errorf("invalid duration %q", value)
+		}
+		return parsed, true, nil
+	case integerValue:
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, true, fmt.Errorf("invalid integer %q", value)
+		}
+		return parsed, true, nil
+	case floatValue:
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, true, fmt.Errorf("invalid number %q", value)
+		}
+		return parsed, true, nil
 	case booleanValue:
 		parsed, err := strconv.ParseBool(value)
 		if err != nil {
@@ -127,6 +162,24 @@ func parseFlagValue(key string, value any, schema map[string]valueType) (any, bo
 		parsed, ok := value.(string)
 		if !ok {
 			return nil, true, fmt.Errorf("expected string, got %T", value)
+		}
+		return parsed, true, nil
+	case durationValue:
+		parsed, ok := value.(time.Duration)
+		if !ok {
+			return nil, true, fmt.Errorf("expected duration, got %T", value)
+		}
+		return parsed, true, nil
+	case integerValue:
+		parsed, ok := value.(int)
+		if !ok {
+			return nil, true, fmt.Errorf("expected integer, got %T", value)
+		}
+		return parsed, true, nil
+	case floatValue:
+		parsed, ok := value.(float64)
+		if !ok {
+			return nil, true, fmt.Errorf("expected number, got %T", value)
 		}
 		return parsed, true, nil
 	case booleanValue:

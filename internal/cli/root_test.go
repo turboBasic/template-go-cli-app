@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -195,13 +197,13 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	var got config.Config
 	var gotLogger *slog.Logger
 	factoryCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
 		got = effective
 		gotLogger = logger
-		return app.NewResourceService(reader, logger), nil
+		return app.NewResourceService(reader, logger), nil, nil
 	}, testBuildInfo(), reader.Names())
-	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list", "--timeout", "2m"})
 	var output bytes.Buffer
 	command.SetOut(&output)
 
@@ -214,8 +216,9 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
+		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Resource: config.ResourceTimeouts{List: durationPointer(2 * time.Minute)}},
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
 	}
 	if factoryCalls != 1 {
@@ -230,6 +233,151 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	}
 }
 
+func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
+	setupConfigEnvironment(t)
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, []byte("[timeouts.resource]\nlist = '80ms'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := blockingTimeoutReader{
+		ResourceReader: memory.NewResourceReader(),
+		started:        make(chan time.Time, 1),
+		deadlines:      make(chan time.Time, 1),
+	}
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger), nil, nil
+	}, testBuildInfo(), memory.NewResourceReader().Names())
+	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	command.SetContext(parentContext)
+	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetOut(&bytes.Buffer{})
+	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want timeout classification and context.DeadlineExceeded", err)
+	}
+	started := <-reader.started
+	deadline := <-reader.deadlines
+	if remaining := deadline.Sub(started); remaining < 50*time.Millisecond || remaining > 500*time.Millisecond {
+		t.Fatalf("adapter deadline interval = %s, want configured 80ms timeout", remaining)
+	}
+}
+
+func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		setupFailure     bool
+		operationFailure bool
+	}{
+		{name: "success"},
+		{name: "factory setup failure", setupFailure: true},
+		{name: "operation failure", operationFailure: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			calls := 0
+			var cleanupErr error
+			var cleanupDeadline time.Time
+			reader := app.ResourceReader(memory.NewResourceReader())
+			if test.operationFailure {
+				reader = failingResourceReader{}
+			}
+			cleanup := func(ctx context.Context) error {
+				calls++
+				cleanupErr = ctx.Err()
+				cleanupDeadline, _ = ctx.Deadline()
+				return nil
+			}
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+				if test.setupFailure {
+					return nil, cleanup, errors.New("injected setup failure")
+				}
+				return app.NewResourceService(reader, logger), cleanup, nil
+			}, testBuildInfo(), memory.NewResourceReader().Names())
+			command.SetArgs([]string{"resource", "list"})
+			command.SetOut(&bytes.Buffer{})
+			err := command.Execute()
+			if test.setupFailure || test.operationFailure {
+				if err == nil {
+					t.Fatal("Execute() error = nil, want failure")
+				}
+			} else if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if calls != 1 {
+				t.Fatalf("cleanup calls = %d, want one", calls)
+			}
+			if cleanupErr != nil || cleanupDeadline.IsZero() || time.Until(cleanupDeadline) <= 0 {
+				t.Fatalf("cleanup context err/deadline = %v/%v, want live bounded context", cleanupErr, cleanupDeadline)
+			}
+		})
+	}
+}
+
+func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *testing.T) {
+	setupConfigEnvironment(t)
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, []byte("[timeouts]\ncleanup = '300ms'\n[timeouts.resource]\nlist = '30ms'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := blockingTimeoutReader{
+		ResourceReader: memory.NewResourceReader(),
+		started:        make(chan time.Time, 1),
+		deadlines:      make(chan time.Time, 1),
+	}
+	type cleanupContextState struct {
+		err      error
+		deadline time.Time
+		bounded  bool
+	}
+	cleanupContext := make(chan cleanupContextState, 1)
+	cleanupCalls := 0
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger), func(ctx context.Context) error {
+			cleanupCalls++
+			deadline, bounded := ctx.Deadline()
+			cleanupContext <- cleanupContextState{err: ctx.Err(), deadline: deadline, bounded: bounded}
+			return nil
+		}, nil
+	}, testBuildInfo(), memory.NewResourceReader().Names())
+	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetOut(&bytes.Buffer{})
+	if err := command.Execute(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want operation deadline", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want one", cleanupCalls)
+	}
+	state := <-cleanupContext
+	if state.err != nil {
+		t.Fatalf("cleanup context error = %v, want live context", state.err)
+	}
+	if !state.bounded {
+		t.Fatal("cleanup context has no deadline")
+	}
+	if remaining := time.Until(state.deadline); remaining < 100*time.Millisecond || remaining > 300*time.Millisecond {
+		t.Fatalf("cleanup deadline remaining = %s, want configured 300ms bound", remaining)
+	}
+}
+
+type blockingTimeoutReader struct {
+	app.ResourceReader
+	started   chan time.Time
+	deadlines chan time.Time
+}
+
+func (r blockingTimeoutReader) List(ctx context.Context) ([]domain.Resource, error) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, errors.New("operation context has no deadline")
+	}
+	r.started <- time.Now()
+	r.deadlines <- deadline
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func durationPointer(duration time.Duration) *time.Duration { return &duration }
+
 func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	setupConfigEnvironment(t)
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
@@ -238,9 +386,9 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	}
 	factoryCalls := 0
 	reader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
-		return app.NewResourceService(reader, logger), nil
+		return app.NewResourceService(reader, logger), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--config", configFile, "resource", "list"})
 	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "open log file") {
@@ -260,8 +408,8 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	previousStderr := os.Stderr
 	os.Stderr = writer
 	commandReader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
-		return app.NewResourceService(commandReader, logger), nil
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(commandReader, logger), nil, nil
 	}, testBuildInfo(), commandReader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
 	var stdout bytes.Buffer
@@ -339,8 +487,8 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 			if failCommand {
 				reader = failingResourceReader{}
 			}
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
-				return app.NewResourceService(reader, logger), nil
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+				return app.NewResourceService(reader, logger), nil, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"--config", configPath, "resource", "list"})
 			command.SetOut(&bytes.Buffer{})
@@ -406,8 +554,8 @@ func (failingResourceReader) Apply(context.Context, string) (domain.Resource, er
 func TestFactoryErrorPropagates(t *testing.T) {
 	setupConfigEnvironment(t)
 	wantErr := errors.New("factory failure")
-	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error) {
-		return nil, wantErr
+	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
+		return nil, nil, wantErr
 	}, testBuildInfo(), nil)
 	command.SetArgs([]string{"resource", "list"})
 
@@ -424,9 +572,9 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, error) {
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 				factoryCalls++
-				return nil, errors.New("factory must not run")
+				return nil, nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
 			command.SetArgs(args)
 			command.SetOut(&bytes.Buffer{})
@@ -455,9 +603,9 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger) (*app.ResourceService, func(context.Context) error, error) {
 		configs = append(configs, effective)
-		return app.NewResourceService(reader, logger), nil
+		return app.NewResourceService(reader, logger), nil, nil
 	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
 		command.SetArgs([]string{"--config", path, "resource", "list"})

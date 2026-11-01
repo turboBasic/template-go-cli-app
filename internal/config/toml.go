@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/knadh/koanf/parsers/toml/v2"
 	"github.com/knadh/koanf/v2"
@@ -49,8 +51,12 @@ func validateValues(source string, values map[string]any, schema map[string]valu
 		}
 		var valid bool
 		switch kind {
-		case stringValue, pathValue:
+		case stringValue, pathValue, durationValue:
 			_, valid = value.(string)
+		case integerValue:
+			_, valid = value.(int64)
+		case floatValue:
+			_, valid = value.(float64)
 		case booleanValue:
 			_, valid = value.(bool)
 		default:
@@ -64,6 +70,18 @@ func validateValues(source string, values map[string]any, schema map[string]valu
 }
 
 func decodeConfig(values map[string]any) (Config, error) {
+	for _, key := range []string{
+		"timeouts.cleanup",
+		"timeouts.resource.list",
+		"timeouts.resource.status",
+		"timeouts.resource.apply",
+		"retry.resource.status.initial_delay",
+		"retry.resource.status.max_delay",
+	} {
+		if err := decodeDuration(values, key); err != nil {
+			return Config{}, err
+		}
+	}
 	settings := koanf.New(".")
 	for key, value := range values {
 		if err := settings.Set(key, value); err != nil {
@@ -79,4 +97,33 @@ func decodeConfig(values map[string]any) (Config, error) {
 		return Config{}, err
 	}
 	return config, nil
+}
+
+func decodeDuration(values map[string]any, key string) error {
+	parts := strings.Split(key, ".")
+	current := values
+	for _, part := range parts[:len(parts)-1] {
+		nested, ok := current[part].(map[string]any)
+		if !ok {
+			return nil
+		}
+		current = nested
+	}
+	value, ok := current[parts[len(parts)-1]]
+	if !ok {
+		return nil
+	}
+	if _, ok := value.(time.Duration); ok {
+		return nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("invalid type for key %q: expected duration string", key)
+	}
+	duration, err := time.ParseDuration(text)
+	if err != nil {
+		return fmt.Errorf("invalid duration for key %q: %w", key, err)
+	}
+	current[parts[len(parts)-1]] = duration
+	return nil
 }
