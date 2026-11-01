@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"runtime/debug"
@@ -22,10 +23,15 @@ func main() {
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger) (*app.ResourceService, error) {
 		return app.NewResourceService(resources, logger), nil
 	}, buildInfo(), resources.Names())
-	if err := command.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	os.Exit(execute(command.Execute, os.Stderr))
+}
+
+func execute(run func() error, stderr io.Writer) int {
+	if err := run(); err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
 	}
+	return 0
 }
 
 func buildInfo() cli.BuildInfo {
