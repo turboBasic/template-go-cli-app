@@ -3,3 +3,19 @@ run:
   timeout: 5m
 linters:
   default: standard
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        presentation:
+          # Terminal presentation stays behind internal/cli so main and the core keep owning
+          # signals, exit codes and results.
+          list-mode: lax
+          files:
+            - "!**/internal/cli/**"
+          deny:
+            - pkg: charm.land/fang/v2
+              desc: import Fang only from internal/cli
+            - pkg: github.com/charmbracelet/colorprofile
+              desc: import colorprofile only from internal/cli

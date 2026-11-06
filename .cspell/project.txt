@@ -27,3 +27,6 @@ zizmorcore
 goldens
 testdata
 CLICOLOR
+depguard
+charmbracelet
+colorprofile
