@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -138,5 +139,62 @@ func TestRootRejectsUnknownCommandButBareRootShowsHelp(t *testing.T) {
 		if err := command.Execute(); err != nil || out.Len() == 0 || *calls != 0 {
 			t.Fatalf("Execute(%v) = %v, output %d bytes, factory calls %d; want help, no error, no factory call", args, err, out.Len(), *calls)
 		}
+	}
+}
+
+var ansiSequence = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func runFailing(t *testing.T, failure error) (string, error) {
+	t.Helper()
+	root := &cobra.Command{Use: "x", RunE: func(*cobra.Command, []string) error { return failure }}
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+	root.SetArgs(nil)
+	err := Execute(context.Background(), root)
+	return stderr.String(), err
+}
+
+func TestErrorHandlerPlainWhenColorIsOff(t *testing.T) {
+	failure := app.Classify(app.ErrValidation, errors.New("bad input"))
+	for name, env := range map[string]map[string]string{
+		"redirected":           {"TERM": "xterm-256color"},
+		"forced then NO_COLOR": {"TERM": "xterm-256color", "CLICOLOR_FORCE": "1", "NO_COLOR": "1"},
+		"TERM=dumb":            {"TERM": "dumb"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, key := range []string{"TERM", "CLICOLOR_FORCE", "NO_COLOR"} {
+				t.Setenv(key, env[key])
+			}
+			stderr, err := runFailing(t, failure)
+			if !errors.Is(err, app.ErrValidation) || stderr != failure.Error()+"\n" {
+				t.Fatalf("stderr = %q, error = %v; want exactly %q", stderr, err, failure.Error()+"\n")
+			}
+			if strings.Contains(stderr, "38;") || strings.Contains(stderr, "48;") {
+				t.Fatalf("stderr = %q, want no color sequences", stderr)
+			}
+		})
+	}
+}
+
+func TestErrorHandlerStyledWhenColorIsForced(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+
+	stderr, _ := runFailing(t, app.Classify(app.ErrValidation, errors.New("bad input")))
+	plain := ansiSequence.ReplaceAllString(stderr, "")
+	for _, want := range []string{"ERROR", "bad input", "Try --help for usage."} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("validation error output lacks %q:\n%s", want, plain)
+		}
+	}
+	if stderr == plain {
+		t.Errorf("validation error output carries no styling: %q", stderr)
+	}
+
+	stderr, _ = runFailing(t, context.DeadlineExceeded)
+	plain = ansiSequence.ReplaceAllString(stderr, "")
+	if !strings.Contains(plain, "ERROR") || !strings.Contains(strings.ToLower(plain), "deadline exceeded") || strings.Contains(plain, "--help") {
+		t.Errorf("deadline output = %q, want the ERROR block without a usage hint", plain)
 	}
 }
