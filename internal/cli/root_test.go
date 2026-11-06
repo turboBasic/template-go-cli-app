@@ -153,6 +153,19 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 	}
 }
 
+func TestPersistentColorFlagContract(t *testing.T) {
+	flag := newTestRootCommand(t).PersistentFlags().Lookup("color")
+	if flag == nil {
+		t.Fatal("--color flag is not registered")
+	}
+	if flag.DefValue != "auto" {
+		t.Errorf("--color default = %q, want auto", flag.DefValue)
+	}
+	if want := "result color mode (auto, always, never)"; flag.Usage != want {
+		t.Errorf("--color usage = %q, want %q", flag.Usage, want)
+	}
+}
+
 func TestResourceNameCompletion(t *testing.T) {
 	command := newTestRootCommand(t)
 	status, _, err := command.Find([]string{"resource", "status"})
