@@ -17,10 +17,11 @@ var (
 	ErrCancellation   = errors.New("cancellation error")
 )
 
-// Classify wraps err with a shared application error category.
+// Classify wraps err with a shared application error category. An error already in the
+// category is returned unchanged, so classifying twice does not repeat the prefix.
 func Classify(category, err error) error {
-	if err == nil {
-		return nil
+	if err == nil || errors.Is(err, category) {
+		return err
 	}
 	return fmt.Errorf("%w: %w", category, err)
 }
