@@ -5,5 +5,3 @@
 *.jpeg binary
 *.gif binary
 *.ico binary
-# Goldens are compared byte for byte; no EOL or whitespace normalisation.
-**/testdata/**/*.golden -text
