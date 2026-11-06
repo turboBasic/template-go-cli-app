@@ -31,3 +31,5 @@ ignorePaths:
   - "**/*.pem"
   - "**/*.key"
   - mise.lock
+  # Goldens capture tool output verbatim, not prose.
+  - "**/testdata/**/*.golden"

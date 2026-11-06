@@ -40,3 +40,13 @@ func TestClassifyNil(t *testing.T) {
 		t.Fatalf("Classify(nil) = %v, want nil", err)
 	}
 }
+
+func TestClassifyIsIdempotent(t *testing.T) {
+	once := Classify(ErrValidation, errors.New("unknown flag: --bogus"))
+	if twice := Classify(ErrValidation, once); twice.Error() != once.Error() {
+		t.Fatalf("Classify twice = %q, want %q", twice, once)
+	}
+	if got := Classify(ErrTimeout, once); !errors.Is(got, ErrTimeout) || !errors.Is(got, ErrValidation) {
+		t.Fatalf("Classify in a different category = %v, want both categories kept", got)
+	}
+}

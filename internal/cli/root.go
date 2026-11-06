@@ -49,6 +49,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	rejectUnknownSubcommands(root)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return app.Classify(app.ErrValidation, err)
 	})
@@ -60,7 +61,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&configPath, "config", "", "configuration file path")
 	flags.StringVar(&logLevel, "log-level", "warn", "logging level (debug, info, warn, error)")
 	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
-	flags.StringVar(&color, "color", "auto", "color mode (auto, always, never)")
+	flags.StringVar(&color, "color", "auto", "result color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected resource operation")
 	var resources *app.ResourceService
@@ -106,7 +107,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		cleanupComplete = false
 		resources = nil
 		renderer = output.Renderer{}
-		if isHelpOrCompletion(cmd) {
+		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
 		workingDir, err := os.Getwd()
@@ -175,6 +176,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		return cleanup(cmd.Context())
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
+	rejectUnknownSubcommands(resource)
 	getResources := func() *app.ResourceService { return resources }
 	getRenderer := func() output.Renderer { return renderer }
 	list := newResourceListCommand(getResources, getRenderer)
@@ -186,6 +188,18 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource)
 	return root
+}
+
+// rejectUnknownSubcommands makes a command that only groups subcommands runnable. Cobra skips Args
+// on a non-runnable command and prints its help with exit 0, so a mistyped subcommand would succeed.
+func rejectUnknownSubcommands(cmd *cobra.Command) {
+	cmd.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return app.Classify(app.ErrValidation, unknownCommandError(cmd, args[0]))
+		}
+		return nil
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 }
 
 func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeouts) *time.Duration {
@@ -211,6 +225,27 @@ func closeAfterRun(command *cobra.Command, cleanup func(context.Context) error) 
 	}
 }
 
+// unknownCommandError reproduces Cobra's own unknown-command message, suggestions included.
+func unknownCommandError(cmd *cobra.Command, name string) error {
+	message := fmt.Sprintf("unknown command %q for %q", name, cmd.CommandPath())
+	if !cmd.DisableSuggestions {
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := cmd.SuggestionsFor(name); len(suggestions) > 0 {
+			message += "\n\nDid you mean this?\n\t" + strings.Join(suggestions, "\n\t") + "\n"
+		}
+	}
+	return errors.New(message)
+}
+
+// validationArgs classifies a positional-argument failure as a validation error (exit 2).
+func validationArgs(inner cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		return app.Classify(app.ErrValidation, inner(cmd, args))
+	}
+}
+
 func isHelpOrCompletion(cmd *cobra.Command) bool {
 	for current := cmd; current != nil; current = current.Parent() {
 		if current.Name() == "help" || current.Name() == "completion" || strings.HasPrefix(current.Name(), "__complete") {
@@ -224,7 +259,7 @@ func newResourceListCommand(getResources func() *app.ResourceService, getRendere
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List resources",
-		Args:  cobra.NoArgs,
+		Args:  validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			items, err := getResources().List(cmd.Context())
 			if err != nil {

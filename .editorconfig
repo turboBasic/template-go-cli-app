@@ -20,3 +20,8 @@ trim_trailing_whitespace = false
 
 [justfile]
 indent_size = 4
+
+# Goldens pin exact bytes, including trailing spaces and a missing final newline.
+[**/testdata/**/*.golden]
+trim_trailing_whitespace = false
+insert_final_newline = false
