@@ -120,7 +120,11 @@ func (r Renderer) RenderResource(resource domain.Resource) error {
 		}
 		return nil
 	}
-	if _, err := fmt.Fprintf(r.Writer, "%s: %s\n", resource.Name, resource.Status); err != nil {
+	status := resource.Status
+	if r.ColorEnabled() {
+		status = newStyles().status(status)
+	}
+	if _, err := fmt.Fprintf(r.Writer, "%s: %s\n", resource.Name, status); err != nil {
 		return fmt.Errorf("write resource: %w", err)
 	}
 	return nil
