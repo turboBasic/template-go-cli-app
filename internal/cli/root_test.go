@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +108,58 @@ func TestResourceCommandsJSONOutput(t *testing.T) {
 			}
 			if strings.Contains(output.String(), "\x1b[") {
 				t.Fatalf("JSON output contains ANSI escape: %q", output.String())
+			}
+		})
+	}
+}
+
+func TestResourceResultColor(t *testing.T) {
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	run := func(t *testing.T, flags []string, command []string) string {
+		t.Helper()
+		root := newTestRootCommand(t)
+		root.SetArgs(append(append([]string{}, flags...), command...))
+		var output bytes.Buffer
+		root.SetOut(&output)
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		return output.String()
+	}
+	for _, command := range [][]string{
+		{"resource", "list"},
+		{"resource", "status", "example-2"},
+		{"resource", "apply", "example-2"},
+	} {
+		t.Run(strings.Join(command[1:], " "), func(t *testing.T) {
+			redirected := run(t, nil, command)
+			plainJSON := run(t, []string{"--output", "json"}, command)
+			tests := []struct {
+				name   string
+				flags  []string
+				styled bool
+				want   string
+			}{
+				{name: "redirected default", want: redirected},
+				{name: "json always", flags: []string{"--output", "json", "--color", "always"}, want: plainJSON},
+				{name: "never", flags: []string{"--color", "never"}, want: redirected},
+				{name: "always", flags: []string{"--color", "always"}, styled: true},
+			}
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					got := run(t, test.flags, command)
+					if has := strings.Contains(got, "\x1b"); has != test.styled {
+						t.Fatalf("output = %q, ESC present = %t, want %t", got, has, test.styled)
+					}
+					if test.styled {
+						if stripped := ansi.ReplaceAllString(got, ""); stripped != redirected {
+							t.Fatalf("stripped = %q, want redirected %q", stripped, redirected)
+						}
+					}
+					if test.want != "" && got != test.want {
+						t.Fatalf("output = %q, want %q", got, test.want)
+					}
+				})
 			}
 		})
 	}
