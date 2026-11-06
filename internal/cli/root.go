@@ -51,7 +51,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		// A runnable root makes Cobra validate Args; without it an unknown command prints help and succeeds.
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return app.Classify(app.ErrValidation, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+				return app.Classify(app.ErrValidation, unknownCommandError(cmd, args[0]))
 			}
 			return nil
 		},
@@ -217,6 +217,20 @@ func closeAfterRun(command *cobra.Command, cleanup func(context.Context) error) 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		return errors.Join(run(cmd, args), cleanup(cmd.Context()))
 	}
+}
+
+// unknownCommandError reproduces Cobra's own unknown-command message, suggestions included.
+func unknownCommandError(cmd *cobra.Command, name string) error {
+	message := fmt.Sprintf("unknown command %q for %q", name, cmd.CommandPath())
+	if !cmd.DisableSuggestions {
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := cmd.SuggestionsFor(name); len(suggestions) > 0 {
+			message += "\n\nDid you mean this?\n\t" + strings.Join(suggestions, "\n\t") + "\n"
+		}
+	}
+	return errors.New(message)
 }
 
 func isHelpOrCompletion(cmd *cobra.Command) bool {
