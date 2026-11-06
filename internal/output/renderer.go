@@ -1,10 +1,12 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -94,7 +96,8 @@ func (r Renderer) RenderList(resources []domain.Resource) error {
 		return nil
 	}
 
-	writer := tabwriter.NewWriter(r.Writer, 12, 8, 0, ' ', 0)
+	var table bytes.Buffer
+	writer := tabwriter.NewWriter(&table, 12, 8, 0, ' ', 0)
 	if _, err := fmt.Fprintln(writer, "NAME\tSTATUS"); err != nil {
 		return fmt.Errorf("write resource list: %w", err)
 	}
@@ -106,7 +109,29 @@ func (r Renderer) RenderList(resources []domain.Resource) error {
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("flush resource list: %w", err)
 	}
+	out := table.String()
+	if r.ColorEnabled() {
+		out = styleTable(out)
+	}
+	if _, err := io.WriteString(r.Writer, out); err != nil {
+		return fmt.Errorf("flush resource list: %w", err)
+	}
 	return nil
+}
+
+// styleTable styles an aligned table after the fact, so escapes never reach the tabwriter
+// and column alignment is the plain one. The STATUS column offset comes from the header line.
+func styleTable(table string) string {
+	s := newStyles()
+	lines := strings.Split(strings.TrimSuffix(table, "\n"), "\n")
+	offset := strings.Index(lines[0], "STATUS")
+	lines[0] = s.header.Render(lines[0])
+	for i := 1; i < len(lines); i++ {
+		if offset >= 0 && len(lines[i]) >= offset {
+			lines[i] = lines[i][:offset] + s.status(lines[i][offset:])
+		}
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // RenderResource writes one resource.

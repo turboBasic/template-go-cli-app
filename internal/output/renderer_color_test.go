@@ -49,3 +49,42 @@ func TestRendererResourceColor(t *testing.T) {
 		})
 	}
 }
+
+func TestRendererListColor(t *testing.T) {
+	tests := []struct {
+		name      string
+		resources []domain.Resource
+		want      string
+	}{
+		{
+			name:      "fixture",
+			resources: []domain.Resource{{Name: "example-1", Status: "ready"}, {Name: "example-2", Status: "pending"}},
+			want:      "NAME        STATUS\nexample-1   ready\nexample-2   pending\n",
+		},
+		{
+			name:      "name wider than the column",
+			resources: []domain.Resource{{Name: "a-fourteen-char", Status: "ready"}, {Name: "b", Status: "unknown"}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var plain, styled bytes.Buffer
+			if err := (Renderer{Writer: &plain, Options: Options{Format: FormatText}}).RenderList(test.resources); err != nil {
+				t.Fatal(err)
+			}
+			if err := (Renderer{Writer: &styled, Options: Options{Format: FormatText, Color: ColorAlways}}).RenderList(test.resources); err != nil {
+				t.Fatal(err)
+			}
+			got := styled.String()
+			if !strings.Contains(got, "\x1b[1m") || !strings.Contains(got, "\x1b[32m") {
+				t.Fatalf("output = %q, want bold header and green ready", got)
+			}
+			if stripped := stripANSI(got); stripped != plain.String() {
+				t.Fatalf("stripped = %q, want plain %q", stripped, plain.String())
+			}
+			if test.want != "" && plain.String() != test.want {
+				t.Fatalf("plain = %q, want %q", plain.String(), test.want)
+			}
+		})
+	}
+}
