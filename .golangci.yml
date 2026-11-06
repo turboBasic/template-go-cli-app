@@ -19,3 +19,11 @@ linters:
               desc: import Fang only from internal/cli
             - pkg: github.com/charmbracelet/colorprofile
               desc: import colorprofile only from internal/cli
+        styling:
+          # Styling stays in the renderer so domain and application code never see a rendering library.
+          list-mode: lax
+          files:
+            - "!**/internal/output/**"
+          deny:
+            - pkg: charm.land/lipgloss/v2
+              desc: import Lip Gloss only from internal/output
