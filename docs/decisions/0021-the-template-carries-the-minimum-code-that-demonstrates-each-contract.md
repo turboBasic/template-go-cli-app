@@ -17,7 +17,7 @@ tracked in the issue tracker, not in a record.
 
 ADR-0020 froze three stages and required every committed capability to be implemented and tested in the
 template. A template is copied, so each extra file, golden or test matrix is something every user must
-rewrite or delete: the 28 characterization goldens removed in #43 existed only to prove one migration.
+rewrite or delete: the 28 characterization golden files removed in #43 existed only to prove one migration.
 
 ## Options
 

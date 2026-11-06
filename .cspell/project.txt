@@ -13,7 +13,6 @@ GOARCH
 gofmt
 goimports
 golangci
-goldens
 gomod
 jactionlint
 knadh

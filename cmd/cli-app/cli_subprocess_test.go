@@ -89,7 +89,7 @@ func runCLIProcess(t *testing.T, binary string, args ...string) (string, string,
 	return stdout.String(), stderr.String(), code
 }
 
-// isolatedEnv drops the settings that change results or color, so goldens do not depend on the caller's shell.
+// isolatedEnv drops the settings that change results or color, so results do not depend on the caller's shell.
 func isolatedEnv() []string {
 	var env []string
 	for _, entry := range os.Environ() {
