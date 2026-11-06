@@ -23,6 +23,9 @@ func Execute(ctx context.Context, root *cobra.Command) error {
 	for _, command := range root.Commands() {
 		if command.Name() == "completion" {
 			rejectUnknownSubcommands(command)
+			for _, shell := range command.Commands() {
+				shell.Args = validationArgs(shell.Args)
+			}
 		}
 	}
 	reported := false

@@ -239,6 +239,13 @@ func unknownCommandError(cmd *cobra.Command, name string) error {
 	return errors.New(message)
 }
 
+// validationArgs classifies a positional-argument failure as a validation error (exit 2).
+func validationArgs(inner cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		return app.Classify(app.ErrValidation, inner(cmd, args))
+	}
+}
+
 func isHelpOrCompletion(cmd *cobra.Command) bool {
 	for current := cmd; current != nil; current = current.Parent() {
 		if current.Name() == "help" || current.Name() == "completion" || strings.HasPrefix(current.Name(), "__complete") {
@@ -252,7 +259,7 @@ func newResourceListCommand(getResources func() *app.ResourceService, getRendere
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List resources",
-		Args:  cobra.NoArgs,
+		Args:  validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			items, err := getResources().List(cmd.Context())
 			if err != nil {
