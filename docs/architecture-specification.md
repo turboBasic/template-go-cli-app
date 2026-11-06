@@ -1,7 +1,7 @@
 # Go CLI App Template — Architecture Specification v1.0
 
 **Status:** Approved
-**Decision baseline:** ADR-001 through ADR-020
+**Decision records:** [decisions/README.md](decisions/README.md)
 **Target platforms:** Linux and macOS, AMD64 and ARM64
 **Primary language:** Go
 
@@ -20,7 +20,7 @@ The template provides hierarchical commands, help, flags, shell completion and v
 5. Keep command semantics and output contracts stable as presentation capabilities grow.
 6. Make automation safe: results go to stdout; diagnostics, logs and progress go to stderr.
 7. Treat secrets as sensitive values throughout configuration, logging and output.
-8. Implement committed integrations as template capabilities while keeping external integrations runtime-optional.
+8. Carry the minimum code and tests that demonstrate each contract, and keep external integrations runtime-optional.
 
 ## 3. Technology decisions
 
@@ -93,11 +93,11 @@ Configuration locations and discovery:
 - Maps merge recursively; arrays are replaced.
 - File-path-typed values from TOML resolve relative to the file that declares them. Values from flags or environment resolve relative to the working directory.
 
-The loader retains the source metadata needed for path resolution and exposes per-leaf provenance through `config show` and `config explain`. Inspection reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
+The loader retains the source metadata needed for path resolution. Where per-leaf provenance is exposed through `config show` and `config explain`, inspection reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
 
 ## 6. CLI and output contract
 
-Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation, and concurrent progress is coordinated. Domain and application code remain independent of rendering libraries.
+Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation. Domain and application code remain independent of rendering libraries.
 
 The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Representative commands are `cli-app resource list`, `cli-app resource status` and `cli-app resource apply`.
 
@@ -105,23 +105,23 @@ The reference application is a simulated infrastructure CLI and uses local fixtu
 
 Use explicitly constructed `log/slog` handlers. Logging provides human-readable stderr output at default `WARN`, plus an optional JSON Lines file destination at default `DEBUG`. Destination levels are independent. There is no default log file; its path is explicit. Use restrictive permissions where supported, external rotation, and fail initialization if a required destination cannot be opened. Apply structured redaction before fan-out, including known sensitive keys, nested attributes and secret-aware types.
 
-Remote logging sinks are extensible and rotation is an optional built-in capability. Resolved secret values must not be intentionally logged. Redaction cannot guarantee removal of secrets embedded in arbitrary free-form messages; application behavior and tests must prevent such messages.
+Any additional destination attaches behind the same redaction, and rotation is external. Resolved secret values must not be intentionally logged. Redaction cannot guarantee removal of secrets embedded in arbitrary free-form messages; application behavior and tests must prevent such messages.
 
 ## 8. Progress, errors and retries
 
-A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Concurrent and nested progress is coordinated so multiple operations do not corrupt terminal output or block application execution indefinitely.
+A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Where several operations report at once, rendering is coordinated so they do not corrupt terminal output or block application execution indefinitely.
 
 Use classified errors, propagate cancellation, perform cleanup and retry only eligible infrastructure operations with bounded behavior. Do not retry whole application workflows automatically. Exact numeric exit-code mapping and retry backoff defaults remain implementation-level details to finalize while preserving these contracts.
 
 ## 9. Test and quality strategy
 
-Tests cover domain and application behavior, configuration precedence and validation, structured redaction, JSON output and stdout/stderr separation, cancellation, failures and exit behavior. Run `go vet`, `golangci-lint` and `go test -race`; exercise Linux and macOS cross-platform builds and smoke tests. Measure coverage without a mandatory percentage threshold. Terminal capability, animated-progress behavior, concurrent-progress stress, secret-provider integration and release artifact verification are tested too.
+Tests cover domain and application behavior, configuration precedence and validation, structured redaction, JSON output and stdout/stderr separation, cancellation, failures and exit behavior. Run `go vet`, `golangci-lint` and `go test -race`; exercise Linux and macOS cross-platform builds and smoke tests. Measure coverage without a mandatory percentage threshold.
 
 ## 10. Developer experience and releases
 
 The repository is a GitHub template with an initialization script or documented setup, mise-managed tools and tasks, Prek hooks, CI aligned with local quality commands, and a README for setup, architecture and development. Initialization updates project names, Go module identity and configuration identifiers while leaving a runnable project. Hooks stay fast; full integration, race and release checks run separately.
 
-Build and version metadata is embedded. GoReleaser and GitHub Actions produce semantic Git-tagged GitHub Releases with archives, checksums and changelogs, with SPDX JSON SBOMs, keyless Sigstore/Cosign signing of release checksums, GitHub provenance attestations and automated Homebrew tap publication. Artifact verification is tested. Sigstore signing does not replace Apple Developer ID signing or notarization.
+Build and version metadata is embedded. GoReleaser and GitHub Actions produce semantic Git-tagged GitHub Releases with archives, checksums and changelogs; releases may add SPDX JSON SBOMs, keyless Sigstore/Cosign signing of release checksums, GitHub provenance attestations and automated Homebrew tap publication. Sigstore signing does not replace Apple Developer ID signing or notarization.
 
 ## 11. Explicit exclusions
 
@@ -129,6 +129,6 @@ The scope excludes Windows; YAML/CSV output; a runtime plugin framework; a manda
 
 ## 12. Change control
 
-ADR-001 through ADR-020 are the accepted baseline. Delivery scope, order and definitions of done are tracked in the GitHub milestones and issues, not here. Implementation details may evolve without amendment when they preserve the accepted contracts; changing a contract requires an explicit ADR amendment. External integrations are runtime-optional.
+The accepted decision records are the baseline. Delivery scope, order and definitions of done are tracked in the GitHub milestones and issues, not here. Implementation details may evolve without a new record when they preserve the accepted contracts; changing a contract requires a superseding ADR.
 
 **Specification version:** 1.0

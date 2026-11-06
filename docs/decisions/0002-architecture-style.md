@@ -3,7 +3,6 @@ id: "0002"
 status: accepted
 date: 2026-10-31
 scope: architecture
-implementation_stage: Stage 1
 ---
 
 # ADR 0002 — Architecture style
@@ -22,9 +21,7 @@ Not saved.
 
 ## Consequences
 
-- This decision is part of the frozen Architecture Specification v1.0 baseline.
-- Implementations must preserve the stated contract and the stage boundary.
-- Any scope change requires an explicit ADR amendment under ADR-0020.
+Not saved.
 
 ## Links
 
