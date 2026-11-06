@@ -11,9 +11,13 @@ rev = "v6.0.0"
 
 [[repos.hooks]]
 id = "trailing-whitespace"
+# Goldens pin exact bytes, including trailing spaces and a missing final newline.
+exclude = '(^|/)testdata/.*\.golden$'
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
+# Goldens pin exact bytes, including trailing spaces and a missing final newline.
+exclude = '(^|/)testdata/.*\.golden$'
 
 [[repos.hooks]]
 id = "check-added-large-files"

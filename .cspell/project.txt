@@ -24,3 +24,5 @@ TCGETS
 WCAG
 zizmor
 zizmorcore
+goldens
+testdata
