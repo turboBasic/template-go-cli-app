@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -47,23 +46,23 @@ func main() {
 		}
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, buildInfo(), resources.Names())
+	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
-		command.SetContext(ctx)
-		return command.Execute()
-	}, os.Stderr))
+		return cli.Execute(ctx, command)
+	}))
 }
 
 func exitWithCode(code int) { os.Exit(code) }
 
-func execute(run func() error, stderr io.Writer) int {
+// execute maps the error cli.Execute already reported to an exit code.
+func execute(run func() error) int {
 	if err := run(); err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
 		return exitCode(err)
 	}
 	return 0
 }
 
-func executeWithSignals(run func(context.Context) error, stderr io.Writer) int {
+func executeWithSignals(run func(context.Context) error) int {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(context.Canceled)
 	signals := make(chan os.Signal, 2)
@@ -71,13 +70,7 @@ func executeWithSignals(run func(context.Context) error, stderr io.Writer) int {
 	defer signal.Stop(signals)
 	result := make(chan int, 1)
 	go func() {
-		result <- execute(func() error {
-			err := run(ctx)
-			if cause := context.Cause(ctx); cause != nil {
-				err = errors.Join(err, cause)
-			}
-			return err
-		}, stderr)
+		result <- execute(func() error { return run(ctx) })
 	}()
 	select {
 	case code := <-result:

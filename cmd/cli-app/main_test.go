@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -66,8 +67,9 @@ func TestExecuteReportsOutputFailureToStderrAndReturnsFailureCode(t *testing.T) 
 	command.SetArgs([]string{"--config", configPath, "--output", "json", "resource", "list"})
 	command.SetOut(failingWriter{err: errors.New("injected output failure")})
 	var stderr bytes.Buffer
+	command.SetErr(&stderr)
 
-	if code := execute(command.Execute, &stderr); code != 1 {
+	if code := execute(func() error { return cli.Execute(context.Background(), command) }); code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if !strings.Contains(stderr.String(), "injected output failure") {
@@ -118,11 +120,11 @@ func TestSignalHelperProcess(t *testing.T) {
 		}, nil
 	}, cli.BuildInfo{}, resources.Names())
 	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetErr(os.Stderr)
 	code := executeWithSignals(func(ctx context.Context) error {
 		_, _ = fmt.Fprintln(os.Stdout, "ready")
-		command.SetContext(ctx)
-		return command.Execute()
-	}, os.Stderr)
+		return cli.Execute(ctx, command)
+	})
 	exitWithCode(code)
 }
 
@@ -156,6 +158,28 @@ func TestFirstSignalCancelsCleansUpAndMapsExitCode(t *testing.T) {
 	}
 }
 
+func TestSignalCauseIsReportedOnce(t *testing.T) {
+	var stderr bytes.Buffer
+	command, lines := startSignalHelperWithStderr(t, false, &stderr)
+	for _, want := range []string{"ready", "operation started"} {
+		if got := nextSignalLine(t, lines); got != want {
+			t.Fatalf("helper output = %q, want %q", got, want)
+		}
+	}
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextSignalLine(t, lines); got != "cleanup started" {
+		t.Fatalf("helper output = %q, want cleanup started", got)
+	}
+	if got := waitSignalExitCode(t, command); got != 130 {
+		t.Fatalf("signal helper exit code = %d, want 130", got)
+	}
+	if got := strings.Count(stderr.String(), "interrupted by SIGINT"); got != 1 {
+		t.Fatalf("stderr = %q, want the interrupt reported exactly once (got %d)", stderr.String(), got)
+	}
+}
+
 func TestSecondSignalBypassesCleanup(t *testing.T) {
 	command, lines := startSignalHelper(t, true)
 	if got := nextSignalLine(t, lines); got != "ready" {
@@ -184,12 +208,18 @@ func TestSecondSignalBypassesCleanup(t *testing.T) {
 
 func startSignalHelper(t *testing.T, blockCleanup bool) (*exec.Cmd, <-chan string) {
 	t.Helper()
+	return startSignalHelperWithStderr(t, blockCleanup, nil)
+}
+
+func startSignalHelperWithStderr(t *testing.T, blockCleanup bool, stderr io.Writer) (*exec.Cmd, <-chan string) {
+	t.Helper()
 	command := exec.Command(os.Args[0], "-test.run=^TestSignalHelperProcess$")
 	blockValue := "0"
 	if blockCleanup {
 		blockValue = "1"
 	}
 	command.Env = append(os.Environ(), "CLI_APP_SIGNAL_HELPER=1", "CLI_APP_SIGNAL_HELPER_BLOCK_CLEANUP="+blockValue)
+	command.Stderr = stderr
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +278,8 @@ func TestUnknownCommandUsesUsageExitCode(t *testing.T) {
 	command := cli.NewRootCommand(reader, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"missing"})
 	var stderr bytes.Buffer
-	if got := execute(command.Execute, &stderr); got != 2 {
+	command.SetErr(&stderr)
+	if got := execute(func() error { return cli.Execute(context.Background(), command) }); got != 2 {
 		t.Fatalf("exit code = %d, want 2; stderr = %q", got, stderr.String())
 	}
 }
