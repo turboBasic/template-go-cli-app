@@ -26,3 +26,4 @@ zizmor
 zizmorcore
 goldens
 testdata
+CLICOLOR

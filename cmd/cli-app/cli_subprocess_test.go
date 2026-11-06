@@ -12,7 +12,7 @@ import (
 )
 
 func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
-	binary := buildCLIProcess(t)
+	binary := buildCLIProcess(t, "")
 	stdout, stderr, code := runCLIProcess(t, binary, "resource", "list")
 	if code != 0 || stderr != "" || stdout != "NAME        STATUS\nexample-1   ready\nexample-2   pending\n" {
 		t.Fatalf("resource list = stdout %q, stderr %q, exit %d; want deterministic fixture output and exit 0", stdout, stderr, code)
@@ -56,10 +56,10 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	}
 }
 
-func buildCLIProcess(t *testing.T) string {
+func buildCLIProcess(t *testing.T, ldflags string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "cli-app")
-	command := exec.Command("go", "build", "-o", binary, ".")
+	command := exec.Command("go", "build", "-ldflags", ldflags, "-o", binary, ".")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build CLI executable: %v\n%s", err, output)
 	}
@@ -74,7 +74,7 @@ func runCLIProcess(t *testing.T, binary string, args ...string) (string, string,
 	}
 	commandArgs := append([]string{"--config", configFile}, args...)
 	command := exec.Command(binary, commandArgs...)
-	command.Env = append(os.Environ(), "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "no-user-config"))
+	command.Env = append(isolatedEnv(), "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "no-user-config"))
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -87,4 +87,17 @@ func runCLIProcess(t *testing.T, binary string, args ...string) (string, string,
 		code = exitError.ExitCode()
 	}
 	return stdout.String(), stderr.String(), code
+}
+
+// isolatedEnv drops the settings that change results or color, so goldens do not depend on the caller's shell.
+func isolatedEnv() []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "CLI_APP_") || strings.HasPrefix(name, "CLICOLOR") || name == "NO_COLOR" || name == "TERM" {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return env
 }

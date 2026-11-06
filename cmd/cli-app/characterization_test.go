@@ -1,9 +1,6 @@
 package main
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -18,7 +15,9 @@ const (
 // completion, version, results and failures; help is asserted structurally because its
 // bytes change when presentation does.
 func TestCharacterization(t *testing.T) {
-	binary := buildCharacterizationBinary(t)
+	binary := buildCLIProcess(t, "-X main.version="+characterizationVersion+
+		" -X main.commit="+characterizationCommit+
+		" -X main.buildDate="+characterizationBuildDate)
 
 	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
 		t.Run("completion "+shell, func(t *testing.T) {
@@ -94,20 +93,6 @@ func TestCharacterization(t *testing.T) {
 			}
 		})
 	}
-}
-
-func buildCharacterizationBinary(t *testing.T) string {
-	t.Helper()
-	binary := filepath.Join(t.TempDir(), "cli-app")
-	ldflags := "-X main.version=" + characterizationVersion +
-		" -X main.commit=" + characterizationCommit +
-		" -X main.buildDate=" + characterizationBuildDate
-	command := exec.Command("go", "build", "-ldflags", ldflags, "-o", binary, ".")
-	command.Env = os.Environ()
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI executable: %v\n%s", err, output)
-	}
-	return binary
 }
 
 func assertExit(t *testing.T, got, want int) {
