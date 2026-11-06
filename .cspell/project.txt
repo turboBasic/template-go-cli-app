@@ -30,3 +30,4 @@ CLICOLOR
 depguard
 charmbracelet
 colorprofile
+COLORTERM

@@ -1,0 +1,17 @@
+
+  Show a resource status                                                        
+         
+  USAGE  
+         
+    cli-app resource status <name> [--flags]  
+         
+  FLAGS  
+         
+    --color      Result color mode (auto, always, never) (auto)
+    --config     Configuration file path
+    -h --help    Help for status
+    --log-level  Logging level (debug, info, warn, error) (warn)
+    --output     Result format (text, json) (text)
+    --quiet      Suppress non-essential output
+    --timeout    Override the timeout for the selected resource operation (0s)
+

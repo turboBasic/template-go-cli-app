@@ -198,3 +198,51 @@ func TestErrorHandlerStyledWhenColorIsForced(t *testing.T) {
 		t.Errorf("deadline output = %q, want the ERROR block without a usage hint", plain)
 	}
 }
+
+func TestGoldenHelpAndErrors(t *testing.T) {
+	withoutTerminalStdout(t)
+	modes := []struct{ name, force string }{{"plain", ""}, {"styled", "1"}}
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			t.Setenv("TERM", "xterm-256color")
+			t.Setenv("COLORTERM", "")
+			t.Setenv("NO_COLOR", "")
+			t.Setenv("CLICOLOR", "")
+			t.Setenv("CLICOLOR_FORCE", mode.force)
+
+			for _, test := range []struct {
+				name string
+				args []string
+			}{
+				{"help-root", []string{"--help"}},
+				{"help-resource", []string{"resource", "--help"}},
+				{"help-resource-status", []string{"resource", "status", "--help"}},
+				{"help-topic-resource", []string{"help", "resource"}},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					var stdout, stderr bytes.Buffer
+					command := newTestRootCommand(t)
+					command.SetOut(&stdout)
+					command.SetErr(&stderr)
+					command.SetArgs(test.args)
+					if err := Execute(context.Background(), command); err != nil || stderr.Len() != 0 {
+						t.Fatalf("Execute(%v) = %v, stderr %q; want success and empty stderr", test.args, err, stderr.String())
+					}
+					assertGolden(t, test.name+"."+mode.name+".golden", stdout.Bytes())
+				})
+			}
+
+			t.Run("error-unknown-command", func(t *testing.T) {
+				var stdout, stderr bytes.Buffer
+				command := newTestRootCommand(t)
+				command.SetOut(&stdout)
+				command.SetErr(&stderr)
+				command.SetArgs([]string{"nope"})
+				if err := Execute(context.Background(), command); !errors.Is(err, app.ErrValidation) || stdout.Len() != 0 {
+					t.Fatalf("Execute(nope) = %v, stdout %q; want a validation error and empty stdout", err, stdout.String())
+				}
+				assertGolden(t, "error-unknown-command."+mode.name+".golden", stderr.Bytes())
+			})
+		})
+	}
+}
