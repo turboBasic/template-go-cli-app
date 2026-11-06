@@ -1,12 +1,15 @@
 ---
 id: "0020"
-status: accepted
+status: superseded
+superseded_by: "0021"
 date: 2026-10-31
 scope: project
 implementation_stage: All stages
 ---
 
 # ADR 0020 — Stage definitions of done and scope freeze
+
+> Superseded by [ADR 0021](0021-the-template-carries-the-minimum-code-that-demonstrates-each-contract.md).
 
 ## Decision
 

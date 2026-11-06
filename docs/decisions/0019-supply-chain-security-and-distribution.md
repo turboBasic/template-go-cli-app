@@ -3,14 +3,13 @@ id: "0019"
 status: accepted
 date: 2026-10-31
 scope: security
-implementation_stage: Stage 3
 ---
 
 # ADR 0019 — Supply-chain security and distribution
 
 ## Decision
 
-Add SPDX JSON SBOMs, keyless Sigstore/Cosign signing of release checksums, GitHub provenance attestations, automated Homebrew tap publishing and artifact-verification tests. Keep Stage 2 GoReleaser/GitHub Releases unchanged.
+Sign release checksums with keyless Sigstore/Cosign. SPDX JSON SBOMs, GitHub provenance attestations and Homebrew tap publishing are optional release capabilities of the template.
 
 ## Context
 
@@ -22,9 +21,7 @@ Not saved.
 
 ## Consequences
 
-- This decision is part of the frozen Architecture Specification v1.0 baseline.
-- Implementations must preserve the stated contract and the stage boundary.
-- Any scope change requires an explicit ADR amendment under ADR-0020.
+Not saved.
 
 ## Links
 

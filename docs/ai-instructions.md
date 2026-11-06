@@ -5,7 +5,9 @@ Go CLI App Template is GitHub template repository.
 ## Constitution
 
 - Follow [Architecture Specification](architecture-specification.md) and the accepted
-  [ADRs](decisions/README.md) for CLI contracts and stage scope.
+  [ADRs](decisions/README.md) for CLI contracts. Delivery scope lives in GitHub milestones and issues.
+- This is a template: carry the minimum code and tests that demonstrate each contract
+  ([ADR-0021](decisions/0021-the-template-carries-the-minimum-code-that-demonstrates-each-contract.md)).
 - Known departures from them are tracked in [Technical debt](technical-debt.md).
 
 ## Stack and structure
