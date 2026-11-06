@@ -17,6 +17,14 @@ import (
 // A signal cause recorded on ctx is joined to the result before it is printed once to
 // the command's error writer, and the joined error is returned for exit-code mapping.
 func Execute(ctx context.Context, root *cobra.Command) error {
+	// Cobra binds the completion scripts' output writer when it creates the command, so it is
+	// created here, after the caller has set the writers, rather than when the tree is built.
+	root.InitDefaultCompletionCmd()
+	for _, command := range root.Commands() {
+		if command.Name() == "completion" {
+			rejectUnknownSubcommands(command)
+		}
+	}
 	reported := false
 	err := fang.Execute(ctx, root,
 		fang.WithoutManpage(),

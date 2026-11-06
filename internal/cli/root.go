@@ -48,15 +48,8 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		// A runnable root makes Cobra validate Args; without it an unknown command prints help and succeeds.
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return app.Classify(app.ErrValidation, unknownCommandError(cmd, args[0]))
-			}
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
+	rejectUnknownSubcommands(root)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return app.Classify(app.ErrValidation, err)
 	})
@@ -114,7 +107,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		cleanupComplete = false
 		resources = nil
 		renderer = output.Renderer{}
-		if cmd == root || isHelpOrCompletion(cmd) {
+		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
 		workingDir, err := os.Getwd()
@@ -183,6 +176,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		return cleanup(cmd.Context())
 	}
 	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
+	rejectUnknownSubcommands(resource)
 	getResources := func() *app.ResourceService { return resources }
 	getRenderer := func() output.Renderer { return renderer }
 	list := newResourceListCommand(getResources, getRenderer)
@@ -194,6 +188,18 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource)
 	return root
+}
+
+// rejectUnknownSubcommands makes a command that only groups subcommands runnable. Cobra skips Args
+// on a non-runnable command and prints its help with exit 0, so a mistyped subcommand would succeed.
+func rejectUnknownSubcommands(cmd *cobra.Command) {
+	cmd.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return app.Classify(app.ErrValidation, unknownCommandError(cmd, args[0]))
+		}
+		return nil
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 }
 
 func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeouts) *time.Duration {

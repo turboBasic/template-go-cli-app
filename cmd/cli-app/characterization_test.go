@@ -14,7 +14,8 @@ const (
 // TestCharacterization pins the Stage 1 behavior of the built binary: exact bytes for
 // completion, version, results and failures; help is asserted structurally because its
 // bytes change when presentation does. The "help unknown topic" row is a deliberate
-// departure from Stage 1, which printed "Unknown help topic" to stderr (see TD-003).
+// departure from Stage 1, which printed "Unknown help topic" to stderr (see TD-003), and the
+// unknown resource and completion subcommand rows fix Stage 1's silent exit 0.
 func TestCharacterization(t *testing.T) {
 	binary := buildCLIProcess(t, "-X main.version="+characterizationVersion+
 		" -X main.commit="+characterizationCommit+
@@ -61,6 +62,9 @@ func TestCharacterization(t *testing.T) {
 	}{
 		{"unknown-command", []string{"nope"}},
 		{"unknown-command-suggestion", []string{"resourc"}}, // cspell:ignore resourc
+		{"unknown-resource-subcommand", []string{"resource", "bogus"}},
+		{"unknown-resource-subcommand-suggestion", []string{"resource", "lst"}},
+		{"unknown-completion-subcommand", []string{"completion", "bogus"}},
 		{"unknown-flag", []string{"resource", "--bogus"}},
 		{"missing-argument", []string{"resource", "apply"}},
 		{"unknown-resource-json", []string{"resource", "apply", "invalid", "--output", "json"}},
