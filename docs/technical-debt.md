@@ -16,13 +16,15 @@ The two also differ on one input: with `CLICOLOR_FORCE=1` and `NO_COLOR=1` on a 
 
 - Origin: S2-01 (#16); ADR-0010 requires color controls.
 - Condition: both `env NO_COLOR=1 CLICOLOR_FORCE=1 TERM=xterm-256color dist/cli-app --help | rg -c '38;'` and
-  `env CLICOLOR_FORCE=1 TERM=xterm-256color dist/cli-app --color never --help | rg -c '38;'` print 0.
+  `env CLICOLOR_FORCE=1 TERM=xterm-256color dist/cli-app --color never --help | rg -c '38;'` print nothing (`rg`
+  prints no count when nothing matches; at HEAD both print 16).
 
 ### TD-002 Redirected help is space-padded
 
 Fang pads redirected help lines with trailing spaces, so golden files are excluded from the whitespace hooks
-(`trailing-whitespace`, `end-of-file-fixer`), `.editorconfig` and cspell. The sentinel
-`internal/cli/testdata/whitespace.golden` fails the hook run if that exclusion is removed.
+(`trailing-whitespace`, `end-of-file-fixer`) and `.editorconfig` trims nothing in them. The sentinel
+`internal/cli/testdata/whitespace.golden` fails the hook run if the hook exclusion is removed. The `-text`
+attribute and the cspell exclusion have their own reasons and stay.
 
 - Origin: S2-01 (#16).
 - Condition: `rg -n ' $' internal/cli/testdata/*help*.golden` returns nothing.
