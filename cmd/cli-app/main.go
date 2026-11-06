@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
@@ -50,19 +49,11 @@ func main() {
 	}, buildInfo(), resources.Names())
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
 		command.SetContext(ctx)
-		return runCommand(command)
+		return command.Execute()
 	}, os.Stderr))
 }
 
 func exitWithCode(code int) { os.Exit(code) }
-
-func runCommand(command *cobra.Command) error {
-	selected, err := command.ExecuteC()
-	if err != nil && selected != nil && !selected.Runnable() {
-		return app.Classify(app.ErrValidation, err)
-	}
-	return err
-}
 
 func execute(run func() error, stderr io.Writer) int {
 	if err := run(); err != nil {

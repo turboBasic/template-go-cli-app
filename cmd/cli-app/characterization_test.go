@@ -80,6 +80,7 @@ func TestCharacterization(t *testing.T) {
 	}{
 		{"help flag", []string{"--help"}, append([]string{"resource", "completion", "help"}, flags...)},
 		{"help resource", []string{"help", "resource"}, append([]string{"list", "status", "apply"}, flags...)},
+		{"help unknown topic", []string{"help", "nope"}, []string{"resource", "completion"}},
 		{"resource status help", []string{"resource", "status", "--help"}, append([]string{"status"}, flags...)},
 	} {
 		t.Run(test.name, func(t *testing.T) {

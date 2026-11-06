@@ -112,3 +112,31 @@ func TestExecuteReportsJoinedErrorOnce(t *testing.T) {
 		}
 	})
 }
+
+func TestRootRejectsUnknownCommandButBareRootShowsHelp(t *testing.T) {
+	setupConfigEnvironment(t)
+	newCommand := func(args ...string) (*cobra.Command, *int) {
+		calls := 0
+		command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			calls++
+			return nil, nil, errors.New("factory must not run")
+		}, testBuildInfo(), nil)
+		command.SetArgs(args)
+		command.SetOut(&bytes.Buffer{})
+		command.SetErr(&bytes.Buffer{})
+		return command, &calls
+	}
+
+	command, calls := newCommand("nope")
+	if err := command.Execute(); !errors.Is(err, app.ErrValidation) || !strings.Contains(err.Error(), `unknown command "nope"`) || *calls != 0 {
+		t.Fatalf("Execute(nope) = %v, factory calls %d; want a validation error and no factory call", err, *calls)
+	}
+	for _, args := range [][]string{nil, {"--output", "xml"}} {
+		command, calls := newCommand(args...)
+		var out bytes.Buffer
+		command.SetOut(&out)
+		if err := command.Execute(); err != nil || out.Len() == 0 || *calls != 0 {
+			t.Fatalf("Execute(%v) = %v, output %d bytes, factory calls %d; want help, no error, no factory call", args, err, out.Len(), *calls)
+		}
+	}
+}

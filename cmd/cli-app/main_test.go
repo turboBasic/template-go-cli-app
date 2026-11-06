@@ -121,7 +121,7 @@ func TestSignalHelperProcess(t *testing.T) {
 	code := executeWithSignals(func(ctx context.Context) error {
 		_, _ = fmt.Fprintln(os.Stdout, "ready")
 		command.SetContext(ctx)
-		return runCommand(command)
+		return command.Execute()
 	}, os.Stderr)
 	exitWithCode(code)
 }
@@ -248,7 +248,7 @@ func TestUnknownCommandUsesUsageExitCode(t *testing.T) {
 	command := cli.NewRootCommand(reader, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"missing"})
 	var stderr bytes.Buffer
-	if got := execute(func() error { return runCommand(command) }, &stderr); got != 2 {
+	if got := execute(command.Execute, &stderr); got != 2 {
 		t.Fatalf("exit code = %d, want 2; stderr = %q", got, stderr.String())
 	}
 }

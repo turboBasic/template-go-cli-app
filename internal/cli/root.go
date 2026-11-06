@@ -48,6 +48,14 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// A runnable root makes Cobra validate Args; without it an unknown command prints help and succeeds.
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return app.Classify(app.ErrValidation, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return app.Classify(app.ErrValidation, err)
@@ -106,7 +114,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		cleanupComplete = false
 		resources = nil
 		renderer = output.Renderer{}
-		if isHelpOrCompletion(cmd) {
+		if cmd == root || isHelpOrCompletion(cmd) {
 			return nil
 		}
 		workingDir, err := os.Getwd()
