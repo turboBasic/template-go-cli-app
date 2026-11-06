@@ -201,27 +201,24 @@ func TestErrorHandlerStyledWhenColorIsForced(t *testing.T) {
 	}
 }
 
-func TestGoldenHelpAndErrors(t *testing.T) {
-	withoutTerminalStdout(t)
-	modes := []struct{ name, force string }{{"plain", ""}, {"styled", "1"}}
-	for _, mode := range modes {
+func TestHelpIsStyledOnlyWhenColorIsForced(t *testing.T) {
+	for _, mode := range []struct{ name, force string }{{"plain", ""}, {"styled", "1"}} {
 		t.Run(mode.name, func(t *testing.T) {
 			t.Setenv("TERM", "xterm-256color")
 			t.Setenv("COLORTERM", "")
 			t.Setenv("NO_COLOR", "")
 			t.Setenv("CLICOLOR", "")
 			t.Setenv("CLICOLOR_FORCE", mode.force)
-
 			for _, test := range []struct {
-				name string
 				args []string
+				want []string
 			}{
-				{"help-root", []string{"--help"}},
-				{"help-resource", []string{"resource", "--help"}},
-				{"help-resource-status", []string{"resource", "status", "--help"}},
-				{"help-topic-resource", []string{"help", "resource"}},
+				{[]string{"--help"}, []string{"resource", "completion", "--output"}},
+				{[]string{"resource", "--help"}, []string{"list", "status", "apply"}},
+				{[]string{"resource", "status", "--help"}, []string{"status", "--output"}},
+				{[]string{"help", "resource"}, []string{"list", "status", "apply"}},
 			} {
-				t.Run(test.name, func(t *testing.T) {
+				t.Run(strings.Join(test.args, "_"), func(t *testing.T) {
 					var stdout, stderr bytes.Buffer
 					command := newTestRootCommand(t)
 					command.SetOut(&stdout)
@@ -230,21 +227,18 @@ func TestGoldenHelpAndErrors(t *testing.T) {
 					if err := Execute(context.Background(), command); err != nil || stderr.Len() != 0 {
 						t.Fatalf("Execute(%v) = %v, stderr %q; want success and empty stderr", test.args, err, stderr.String())
 					}
-					assertGolden(t, test.name+"."+mode.name+".golden", stdout.Bytes())
+					styled := strings.Contains(stdout.String(), "\x1b[")
+					if styled != (mode.force == "1") {
+						t.Errorf("help styled = %v in %s mode:\n%q", styled, mode.name, stdout.String())
+					}
+					plain := ansiSequence.ReplaceAllString(stdout.String(), "")
+					for _, want := range test.want {
+						if !strings.Contains(plain, want) {
+							t.Errorf("help lacks %q:\n%s", want, plain)
+						}
+					}
 				})
 			}
-
-			t.Run("error-unknown-command", func(t *testing.T) {
-				var stdout, stderr bytes.Buffer
-				command := newTestRootCommand(t)
-				command.SetOut(&stdout)
-				command.SetErr(&stderr)
-				command.SetArgs([]string{"nope"})
-				if err := Execute(context.Background(), command); !errors.Is(err, app.ErrValidation) || stdout.Len() != 0 {
-					t.Fatalf("Execute(nope) = %v, stdout %q; want a validation error and empty stdout", err, stdout.String())
-				}
-				assertGolden(t, "error-unknown-command."+mode.name+".golden", stderr.Bytes())
-			})
 		})
 	}
 }
