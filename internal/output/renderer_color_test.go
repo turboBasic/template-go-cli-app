@@ -55,15 +55,18 @@ func TestRendererListColor(t *testing.T) {
 		name      string
 		resources []domain.Resource
 		want      string
+		contains  []string
 	}{
 		{
 			name:      "fixture",
 			resources: []domain.Resource{{Name: "example-1", Status: "ready"}, {Name: "example-2", Status: "pending"}},
 			want:      "NAME        STATUS\nexample-1   ready\nexample-2   pending\n",
+			contains:  []string{"\x1b[33m"},
 		},
 		{
 			name:      "name wider than the column",
 			resources: []domain.Resource{{Name: "a-fourteen-char", Status: "ready"}, {Name: "b", Status: "unknown"}},
+			contains:  []string{" unknown\n"},
 		},
 	}
 	for _, test := range tests {
@@ -78,6 +81,11 @@ func TestRendererListColor(t *testing.T) {
 			got := styled.String()
 			if !strings.Contains(got, "\x1b[1m") || !strings.Contains(got, "\x1b[32m") {
 				t.Fatalf("output = %q, want bold header and green ready", got)
+			}
+			for _, fragment := range test.contains {
+				if !strings.Contains(got, fragment) {
+					t.Fatalf("output = %q, want fragment %q", got, fragment)
+				}
 			}
 			if stripped := stripANSI(got); stripped != plain.String() {
 				t.Fatalf("stripped = %q, want plain %q", stripped, plain.String())
