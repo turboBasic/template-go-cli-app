@@ -33,8 +33,8 @@ func NewResolver(runner Runner) *Resolver {
 }
 
 // Resolve returns the secret behind an op:// reference. A missing vault, item or field is
-// app.ErrValidation, an authentication failure is app.ErrAuthentication, a missing op binary is
-// app.ErrUnavailable and cancellation is the context's error.
+// app.ErrValidation, an authentication failure is app.ErrAuthentication, cancellation is the
+// context's error and anything else, a missing op binary included, is a plain error.
 func (r *Resolver) Resolve(ctx context.Context, reference string) (logging.Secret, error) {
 	if !strings.HasPrefix(reference, referencePrefix) {
 		return "", app.Classify(app.ErrValidation, fmt.Errorf("secret reference %q is not an %s reference", reference, referencePrefix))
@@ -48,7 +48,7 @@ func (r *Resolver) Resolve(ctx context.Context, reference string) (logging.Secre
 		return "", ctxErr
 	}
 	if errors.Is(err, exec.ErrNotFound) {
-		return "", app.Classify(app.ErrUnavailable, fmt.Errorf("resolve %s: op is not installed: %w", reference, err))
+		return "", fmt.Errorf("resolve %s: op is not installed: %w", reference, err)
 	}
 	// ponytail: op exits 1 for every failure, so classification matches its stderr text, which can
 	// change between op versions; an unrecognised message stays a plain error. Upgrade path: a
