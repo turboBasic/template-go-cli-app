@@ -15,6 +15,7 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
+	"github.com/turboBasic/template-go-cli-app/internal/infra/onepassword"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
@@ -47,7 +48,7 @@ func main() {
 			}
 			reader = retryingReader
 		}
-		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(nil, effective.Resource.Credential)), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Resource.Credential)), nil, nil
 	}, buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {

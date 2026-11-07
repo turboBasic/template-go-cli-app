@@ -56,6 +56,74 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestCLIProcessOnePasswordReference(t *testing.T) {
+	const reference = "op://vault/item/field"
+	binary := buildCLIProcess(t, "")
+	stub := func(t *testing.T, body string) (pathDir, argvFile string) {
+		t.Helper()
+		pathDir = t.TempDir()
+		argvFile = filepath.Join(pathDir, "argv")
+		script := "#!/bin/sh\nprintf '%s ' \"$@\" > '" + argvFile + "'\n" + body + "\n"
+		if err := os.WriteFile(filepath.Join(pathDir, "op"), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return pathDir, argvFile
+	}
+	tests := []struct {
+		name       string
+		stub       string // body of the stub op; empty means no op on PATH
+		credential string
+		args       []string
+		wantCode   int
+		wantStderr string
+		wantArgv   string // what the stub recorded; empty means it must not have run
+	}{
+		{name: "help needs no op", credential: reference, args: []string{"--help"}},
+		{name: "completion needs no op", credential: reference, args: []string{"completion", "bash"}},
+		{name: "apply without a reference needs no op", args: []string{"resource", "apply", "example-1"}},
+		{name: "reference resolves through op", stub: "printf s3cr3t", credential: reference,
+			args: []string{"resource", "apply", "example-1"}, wantArgv: "read --no-newline " + reference + " "},
+		{name: "signed-out op fails with the reference", stub: "echo '[ERROR] You are not currently signed in.' >&2; exit 1", credential: reference,
+			args: []string{"resource", "apply", "example-1"}, wantCode: 1, wantStderr: reference, wantArgv: "read --no-newline " + reference + " "},
+		{name: "missing op is reported", credential: reference,
+			args: []string{"resource", "apply", "example-1"}, wantCode: 1, wantStderr: "op is not installed"},
+		{name: "reference without a scheme is rejected before op runs", stub: "printf s3cr3t", credential: "vault/item/field",
+			args: []string{"resource", "apply", "example-1"}, wantCode: 2, wantStderr: "resource.credential"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pathDir, argvFile := t.TempDir(), ""
+			if tt.stub != "" {
+				pathDir, argvFile = stub(t, tt.stub)
+			}
+			env := []string{"PATH=" + pathDir}
+			if tt.credential != "" {
+				env = append(env, "CLI_APP_RESOURCE_CREDENTIAL="+tt.credential)
+			}
+			stdout, stderr, code := runCLIProcessEnv(t, binary, env, tt.args...)
+			if code != tt.wantCode || !strings.Contains(stderr, tt.wantStderr) {
+				t.Fatalf("exit %d, stderr %q; want exit %d and stderr containing %q", code, stderr, tt.wantCode, tt.wantStderr)
+			}
+			if strings.Contains(stdout+stderr, "s3cr3t") {
+				t.Fatalf("output contains the secret: stdout %q, stderr %q", stdout, stderr)
+			}
+			if argvFile == "" {
+				return
+			}
+			argv, err := os.ReadFile(argvFile)
+			if tt.wantArgv == "" {
+				if err == nil {
+					t.Fatalf("op ran with %q, want it never run", argv)
+				}
+				return
+			}
+			if err != nil || string(argv) != tt.wantArgv {
+				t.Fatalf("op argv = %q (read error %v), want %q", argv, err, tt.wantArgv)
+			}
+		})
+	}
+}
+
 func buildCLIProcess(t *testing.T, ldflags string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "cli-app")
@@ -68,13 +136,19 @@ func buildCLIProcess(t *testing.T, ldflags string) string {
 
 func runCLIProcess(t *testing.T, binary string, args ...string) (string, string, int) {
 	t.Helper()
+	return runCLIProcessEnv(t, binary, nil, args...)
+}
+
+// runCLIProcessEnv runs the CLI with extraEnv added after the isolated environment, so it wins.
+func runCLIProcessEnv(t *testing.T, binary string, extraEnv []string, args ...string) (string, string, int) {
+	t.Helper()
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
 	if err := os.WriteFile(configFile, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	commandArgs := append([]string{"--config", configFile}, args...)
 	command := exec.Command(binary, commandArgs...)
-	command.Env = append(isolatedEnv(), "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "no-user-config"))
+	command.Env = append(append(isolatedEnv(), "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "no-user-config")), extraEnv...)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
