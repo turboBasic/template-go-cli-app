@@ -36,6 +36,7 @@ never went through CI publishes untested archives. The release snapshot job alre
 configuration on every pull request; what remains is tagging an unchecked commit. Either run the tests and the
 archive check inside `release.yml` before publishing, or restrict `v*` tags to commits on `main` with a ruleset.
 
-- Origin: S2-05 (#20); ADR-0014 publishes releases from tags. Owner: S2-06 (#19), which pushes the first real tag.
+- Origin: S2-05 (#20); ADR-0014 publishes releases from tags. No open issue owns it: S2-06 (#19) closed as not
+  planned.
 - Condition: `rg -c 'mise run test|check-release' .github/workflows/release.yml` prints a non-zero count (`rg`
   prints no count when nothing matches; at HEAD it prints nothing).
