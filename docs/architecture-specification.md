@@ -58,7 +58,7 @@ internal/domain/{resource}.go                           # models, invariants and
 internal/config/{config,load,provenance,validate}.go    # loading, source metadata and validation
 internal/logging/{setup,redact,fanout}.go               # slog setup, redaction and destinations
 internal/output/{renderer,terminal,progress}.go         # result rendering, terminal capabilities and progress
-internal/infra/{fixture,retry,onepassword}/            # external-facing adapters, simulated fixture and 1Password adapter
+internal/infra/{memory,retry,onepassword}/              # external-facing adapters, simulated fixture and 1Password adapter
 test/fixtures/
 docs/architecture-specification.md
 docs/decisions/
