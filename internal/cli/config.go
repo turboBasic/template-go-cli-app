@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 	"github.com/turboBasic/template-go-cli-app/internal/output"
 )
 
@@ -26,7 +27,7 @@ func newConfigCommand(getEntries func() []config.Entry, getRenderer func() outpu
 					return app.Classify(app.ErrValidation, fmt.Errorf("no configuration key matches %q", args[0]))
 				}
 			}
-			return getRenderer().RenderConfig(entries)
+			return getRenderer().RenderConfig(maskSensitive(entries))
 		},
 	}
 	closeAfterRun(show, cleanup)
@@ -43,4 +44,16 @@ func filterEntries(entries []config.Entry, key string) []config.Entry {
 		}
 	}
 	return kept
+}
+
+// maskSensitive returns a copy in which entries with a sensitive key carry the redaction marker.
+func maskSensitive(entries []config.Entry) []config.Entry {
+	masked := make([]config.Entry, len(entries))
+	for i, entry := range entries {
+		if logging.SensitiveKey(entry.Key) {
+			entry.Value = logging.Redacted
+		}
+		masked[i] = entry
+	}
+	return masked
 }

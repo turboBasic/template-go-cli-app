@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -11,7 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
+	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
+	"github.com/turboBasic/template-go-cli-app/internal/output"
 )
 
 type configRow struct {
@@ -138,5 +141,27 @@ func TestConfigShowKeyFilter(t *testing.T) {
 	command, _ = newCommand("config", "nope")
 	if err := command.Execute(); !errors.Is(err, app.ErrValidation) {
 		t.Errorf("config nope = %v, want validation error", err)
+	}
+}
+
+func TestConfigShowMasksSensitiveValues(t *testing.T) {
+	entries := []config.Entry{
+		{Key: "output", Value: "text", Source: config.KindDefault},
+		{Key: "provider.api_token", Value: "secret-value", Source: config.KindUserFile, Origin: "/u/config.toml"},
+	}
+	for _, format := range []output.Format{output.FormatText, output.FormatJSON} {
+		t.Run(string(format), func(t *testing.T) {
+			var out bytes.Buffer
+			renderer := output.Renderer{Writer: &out, Options: output.Options{Format: format, Color: output.ColorNever}}
+			command := newConfigCommand(func() []config.Entry { return entries }, func() output.Renderer { return renderer }, func(context.Context) error { return nil })
+			command.SetArgs([]string{"show"})
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			got := out.String()
+			if strings.Contains(got, "secret-value") || !strings.Contains(got, "[REDACTED]") || !strings.Contains(got, "text") {
+				t.Errorf("output = %q, want masked token and the real output value", got)
+			}
+		})
 	}
 }
