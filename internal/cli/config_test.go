@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -92,7 +93,6 @@ func TestConfigShowReportsEverySource(t *testing.T) {
 	}
 	text := out.String()
 	for _, line := range []string{
-		"log.file.level     \"info\"",
 		"user file (" + user + ")",
 		"project file (" + project + ")",
 		"environment variable (CLI_APP_COLOR)",
@@ -101,6 +101,9 @@ func TestConfigShowReportsEverySource(t *testing.T) {
 		if !strings.Contains(text, line) {
 			t.Errorf("text output missing %q:\n%s", line, text)
 		}
+	}
+	if !regexp.MustCompile(`log\.file\.level\s+"info"`).MatchString(text) {
+		t.Errorf("text output missing the log.file.level row:\n%s", text)
 	}
 	sawOutput := false
 	for _, line := range strings.Split(text, "\n") {
@@ -170,5 +173,24 @@ func TestConfigShowMasksSensitiveValues(t *testing.T) {
 				t.Errorf("output = %q, want masked token and the real output value", got)
 			}
 		})
+	}
+}
+
+func TestConfigShowCredentialReferenceIsNotMasked(t *testing.T) {
+	_, _, newCommand := configShowFixture(t)
+	t.Setenv("CLI_APP_RESOURCE_CREDENTIAL", "op://vault/item/field")
+	command, out := newCommand("--output", "json", "config", "show", "resource.credential")
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var rows []configRow
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Key != "resource.credential" || rows[0].Source != "environment variable" {
+		t.Fatalf("rows = %+v, want one environment row", rows)
+	}
+	if got := out.String(); !strings.Contains(got, "op://vault/item/field") || strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("output = %q, want the unmasked reference", got)
 	}
 }

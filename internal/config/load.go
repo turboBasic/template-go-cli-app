@@ -72,6 +72,7 @@ func defaultValues() map[string]any {
 		"color":    config.Color,
 		"quiet":    config.Quiet,
 		"timeouts": map[string]any{"cleanup": config.Timeouts.Cleanup},
+		"resource": map[string]any{"credential": config.Resource.Credential},
 	}
 }
 

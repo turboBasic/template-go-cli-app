@@ -47,7 +47,7 @@ func main() {
 			}
 			reader = retryingReader
 		}
-		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(nil, effective.Resource.Credential)), nil, nil
 	}, buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {

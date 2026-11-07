@@ -27,5 +27,6 @@ func productionSchema() map[string]valueType {
 		"retry.resource.status.initial_delay": durationValue,
 		"retry.resource.status.max_delay":     durationValue,
 		"retry.resource.status.jitter":        floatValue,
+		"resource.credential":                 stringValue,
 	}
 }

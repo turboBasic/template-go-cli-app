@@ -2,17 +2,19 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 // ResourceReader supplies resources to application use cases.
 type ResourceReader interface {
 	List(context.Context) ([]domain.Resource, error)
 	Status(context.Context, string) (domain.Resource, error)
-	Apply(context.Context, string) (domain.Resource, error)
+	Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error)
 }
 
 // Status returns the named resource and its current status.
@@ -34,11 +36,15 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
+	credential, err := s.resolveCredential(ctx)
+	if err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
 	s.reportProgress(ProgressEvent{Phase: "applying", Message: "Applying resource"})
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
-	resource, err := s.reader.Apply(ctx, name)
+	resource, err := s.reader.Apply(ctx, name, credential)
 	if err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
@@ -59,6 +65,17 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	return resource, nil
 }
 
+// resolveCredential resolves the configured reference once, only when one is set.
+func (s *ResourceService) resolveCredential(ctx context.Context) (logging.Secret, error) {
+	if s.credentialRef == "" {
+		return "", nil
+	}
+	if s.resolver == nil {
+		return "", Classify(ErrValidation, errors.New("no secret provider configured"))
+	}
+	return s.resolver.Resolve(ctx, s.credentialRef)
+}
+
 func (s *ResourceService) reportProgress(event ProgressEvent) {
 	if s.progressReporter != nil {
 		s.progressReporter.Report(event)
@@ -70,11 +87,25 @@ type ResourceService struct {
 	reader           ResourceReader
 	logger           *slog.Logger
 	progressReporter ProgressReporter
+	resolver         SecretResolver
+	credentialRef    string
+}
+
+// ResourceOption configures optional behaviour of a ResourceService.
+type ResourceOption func(*ResourceService)
+
+// WithCredential makes Apply resolve reference through resolver on demand; an empty reference disables it.
+func WithCredential(resolver SecretResolver, reference string) ResourceOption {
+	return func(s *ResourceService) { s.resolver, s.credentialRef = resolver, reference }
 }
 
 // NewResourceService constructs a resource service with its required dependencies.
-func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter) *ResourceService {
-	return &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter}
+func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter, options ...ResourceOption) *ResourceService {
+	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 // List returns the resources supplied by the configured reader.
