@@ -1,5 +1,6 @@
 actionutil
 Andrii
+bubbletea
 charmbracelet
 chdir
 CLICOLOR

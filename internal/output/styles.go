@@ -8,6 +8,8 @@ type styles struct {
 	header  lipgloss.Style
 	ready   lipgloss.Style
 	pending lipgloss.Style
+	phase   lipgloss.Style
+	detail  lipgloss.Style
 }
 
 func newStyles() styles {
@@ -15,6 +17,8 @@ func newStyles() styles {
 		header:  lipgloss.NewStyle().Bold(true),
 		ready:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
 		pending: lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		phase:   lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+		detail:  lipgloss.NewStyle().Faint(true),
 	}
 }
 

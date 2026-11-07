@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -9,17 +10,31 @@ import (
 
 // ResourceReader provides the reference resources from local memory.
 type ResourceReader struct {
-	resources []domain.Resource
+	resources  []domain.Resource
+	applyDelay time.Duration
+}
+
+// Option configures a ResourceReader.
+type Option func(*ResourceReader)
+
+// WithApplyDelay makes Apply wait d, or return the context's error first, so a demo can show
+// progress while an operation runs.
+func WithApplyDelay(d time.Duration) Option {
+	return func(r *ResourceReader) { r.applyDelay = d }
 }
 
 var _ app.ResourceReader = (*ResourceReader)(nil)
 
 // NewResourceReader constructs the local reference fixtures.
-func NewResourceReader() *ResourceReader {
-	return &ResourceReader{resources: []domain.Resource{
+func NewResourceReader(options ...Option) *ResourceReader {
+	r := &ResourceReader{resources: []domain.Resource{
 		{Name: "example-1", Status: "ready"},
 		{Name: "example-2", Status: "pending"},
 	}}
+	for _, option := range options {
+		option(r)
+	}
+	return r
 }
 
 // Names returns the names available for local resource completion.
@@ -56,6 +71,15 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 func (r *ResourceReader) Apply(ctx context.Context, name string) (domain.Resource, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, err
+	}
+	if r.applyDelay > 0 {
+		timer := time.NewTimer(r.applyDelay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return domain.Resource{}, ctx.Err()
+		}
 	}
 	for i := range r.resources {
 		if r.resources[i].Name == name {

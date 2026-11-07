@@ -2,8 +2,10 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 )
@@ -63,4 +65,35 @@ func TestResourceReaderRejectsUnknownResource(t *testing.T) {
 	if _, err := reader.Apply(context.Background(), "missing"); err != domain.ErrResourceNotFound {
 		t.Fatalf("Apply() error = %v, want resource not found", err)
 	}
+}
+
+func TestResourceReaderApplyDelay(t *testing.T) {
+	t.Run("waits for the delay", func(t *testing.T) {
+		reader := NewResourceReader(WithApplyDelay(50 * time.Millisecond))
+		start := time.Now()
+		resource, err := reader.Apply(context.Background(), "example-2")
+		if err != nil || resource.Status != "ready" {
+			t.Fatalf("Apply() = %#v, %v; want ready", resource, err)
+		}
+		if elapsed := time.Since(start); elapsed < 50*time.Millisecond {
+			t.Fatalf("Apply() took %s, want at least 50ms", elapsed)
+		}
+	})
+
+	t.Run("cancellation interrupts the wait and leaves the resource unchanged", func(t *testing.T) {
+		reader := NewResourceReader(WithApplyDelay(time.Minute))
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(10*time.Millisecond, cancel)
+		start := time.Now()
+		_, err := reader.Apply(ctx, "example-2")
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Apply() error = %v, want context.Canceled", err)
+		}
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Fatalf("Apply() took %s after cancellation, want it to return promptly", elapsed)
+		}
+		if resource, err := reader.Status(context.Background(), "example-2"); err != nil || resource.Status != "pending" {
+			t.Fatalf("Status() = %#v, %v; want pending", resource, err)
+		}
+	})
 }
