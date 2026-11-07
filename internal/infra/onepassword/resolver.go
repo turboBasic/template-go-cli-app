@@ -50,6 +50,11 @@ func (r *Resolver) Resolve(ctx context.Context, reference string) (logging.Secre
 	if errors.Is(err, exec.ErrNotFound) {
 		return "", app.Classify(app.ErrUnavailable, fmt.Errorf("resolve %s: op is not installed: %w", reference, err))
 	}
+	// ponytail: op exits 1 for every failure, so classification matches its stderr text, which can
+	// change between op versions; an unrecognised message stays a plain error. Upgrade path: a
+	// contract test against a real op.
+	missingMessages := []string{"isn't an item", "isn't a vault", "isn't a field", "isn't a section", "could not be found"}
+	authenticationMessages := []string{"not currently signed in", "not signed in", "authorization prompt dismissed", "unauthorized", "authentication required"}
 	message := strings.TrimSpace(string(stderr))
 	switch {
 	case matchesAny(message, missingMessages):
@@ -60,14 +65,6 @@ func (r *Resolver) Resolve(ctx context.Context, reference string) (logging.Secre
 		return "", fmt.Errorf("resolve %s with op: %w: %s", reference, err, message)
 	}
 }
-
-// ponytail: op exits 1 for every failure, so classification matches its stderr text, which can
-// change between op versions; an unrecognised message stays a plain error. Upgrade path: a
-// contract test against a real op.
-var (
-	missingMessages        = []string{"isn't an item", "isn't a vault", "isn't a field", "isn't a section", "could not be found"}
-	authenticationMessages = []string{"not currently signed in", "not signed in", "authorization prompt dismissed", "unauthorized", "authentication required"}
-)
 
 func matchesAny(message string, needles []string) bool {
 	message = strings.ToLower(message)

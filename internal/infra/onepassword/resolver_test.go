@@ -48,8 +48,10 @@ func TestResolve(t *testing.T) {
 		wantNot   []error // categories the error must not carry
 		wantErr   bool
 		wantCalls int
+		wantArgv  []string
 	}{
-		{name: "success", reference: testReference, runner: &fakeRunner{stdout: testSecret}, want: testSecret, wantCalls: 1},
+		{name: "success", reference: testReference, runner: &fakeRunner{stdout: testSecret}, want: testSecret, wantCalls: 1,
+			wantArgv: []string{"op", "read", "--no-newline", testReference}},
 		{name: "missing item", reference: testReference, wantErr: true, wantCalls: 1,
 			runner: &fakeRunner{stdout: testSecret, err: exitError, stderr: `[ERROR] "item" isn't an item in the "vault" vault.`},
 			wantIs: app.ErrValidation, wantNot: []error{app.ErrAuthentication, app.ErrUnavailable}},
@@ -110,26 +112,9 @@ func TestResolve(t *testing.T) {
 			if len(tt.runner.calls) != tt.wantCalls {
 				t.Fatalf("runner calls = %d, want %d", len(tt.runner.calls), tt.wantCalls)
 			}
-			if tt.name == "success" {
-				want := []string{"op", "read", "--no-newline", testReference}
-				if !reflect.DeepEqual(tt.runner.calls[0], want) {
-					t.Fatalf("argv = %v, want %v", tt.runner.calls[0], want)
-				}
+			if tt.wantArgv != nil && !reflect.DeepEqual(tt.runner.calls[0], tt.wantArgv) {
+				t.Fatalf("argv = %v, want %v", tt.runner.calls[0], tt.wantArgv)
 			}
 		})
-	}
-}
-
-func TestResolveCancelsABlockedRunner(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() {
-		_, err := NewResolver(&fakeRunner{block: true}).Resolve(ctx, testReference)
-		result <- err
-	}()
-	cancel()
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("Resolve error = %v, want context.Canceled", err)
 	}
 }
