@@ -17,7 +17,7 @@ just = "1.59.0"
 prek = "0.5.10"
 shellcheck = "0.11.0"
 taplo = "0.10.0"
-uv = "0.13.6"
+uv = "0.13.7"
 
 [tasks.lint]
 run = "just lint"
