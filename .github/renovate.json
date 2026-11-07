@@ -7,6 +7,7 @@
   "semanticCommitType": "chore",
   "semanticCommitScope": "deps",
   "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
   "platformAutomerge": false,
   "assignees": ["turboBasic"],
   "assignAutomerge": true,
