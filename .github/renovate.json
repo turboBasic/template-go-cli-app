@@ -7,6 +7,7 @@
   "semanticCommitType": "chore",
   "semanticCommitScope": "deps",
   "minimumReleaseAge": "3 days",
+  "platformAutomerge": false,
   "packageRules": [
     {
       "description": "Keep first-party reusable workflows on their moving compatibility refs.",
@@ -15,11 +16,16 @@
       "enabled": false
     },
     {
-      "description": "Dev tools only run in lint and CI, where a breaking release fails the required check. The Go toolchain builds the binary, so it stays manual.",
+      "description": "Dev tools only run in lint and CI, where a breaking release fails the required check.",
       "matchManagers": ["mise"],
-      "matchPackageNames": ["!go"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "The Go toolchain builds the binary, so it stays manual.",
+      "matchManagers": ["mise"],
+      "matchPackageNames": ["go"],
+      "automerge": false
     },
     {
       "description": "Go modules ship in the binary; the renderer tests pin its output, so only patches merge unattended.",
