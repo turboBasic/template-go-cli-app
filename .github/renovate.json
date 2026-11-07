@@ -8,6 +8,8 @@
   "semanticCommitScope": "deps",
   "minimumReleaseAge": "3 days",
   "platformAutomerge": false,
+  "assignees": ["turboBasic"],
+  "assignAutomerge": true,
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
