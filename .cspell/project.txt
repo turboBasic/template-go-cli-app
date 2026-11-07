@@ -28,6 +28,7 @@ pipx
 prek
 Roosty
 Sigstore
+syft
 taplo
 TCGETS
 testdata
