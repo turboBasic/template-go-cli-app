@@ -132,24 +132,50 @@ func TestNonTerminalCharacterDevice(t *testing.T) {
 
 func TestColorEnabled(t *testing.T) {
 	tests := []struct {
-		name      string
-		format    Format
-		mode      ColorMode
-		terminals TerminalCapabilities
-		noColor   bool
-		want      bool
+		name       string
+		format     Format
+		mode       ColorMode
+		onTerminal bool
+		noColor    bool
+		want       bool
 	}{
-		{name: "auto on stdout terminal", format: FormatText, mode: ColorAuto, terminals: TerminalCapabilities{Stdout: true}, want: true},
-		{name: "stderr terminal does not enable stdout color", format: FormatText, mode: ColorAuto, terminals: TerminalCapabilities{Stderr: true}},
-		{name: "no color disables auto", format: FormatText, mode: ColorAuto, terminals: TerminalCapabilities{Stdout: true}, noColor: true},
+		{name: "auto on terminal", format: FormatText, mode: ColorAuto, onTerminal: true, want: true},
+		{name: "auto off terminal", format: FormatText, mode: ColorAuto},
+		{name: "no color disables auto", format: FormatText, mode: ColorAuto, onTerminal: true, noColor: true},
 		{name: "always overrides no color and tty", format: FormatText, mode: ColorAlways, noColor: true, want: true},
-		{name: "never overrides stdout tty", format: FormatText, mode: ColorNever, terminals: TerminalCapabilities{Stdout: true}},
+		{name: "never overrides tty", format: FormatText, mode: ColorNever, onTerminal: true},
 		{name: "json ignores always", format: FormatJSON, mode: ColorAlways, want: false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := ColorEnabled(test.format, test.mode, test.terminals, test.noColor); got != test.want {
+			if got := ColorEnabled(test.format, test.mode, test.onTerminal, test.noColor); got != test.want {
 				t.Fatalf("ColorEnabled() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestStreamColorFollowsItsOwnTerminal(t *testing.T) {
+	tests := []struct {
+		name         string
+		terminals    TerminalCapabilities
+		noColor      bool
+		wantResults  bool
+		wantProgress bool
+	}{
+		{name: "stdout terminal only", terminals: TerminalCapabilities{Stdout: true}, wantResults: true},
+		{name: "stderr terminal only", terminals: TerminalCapabilities{Stderr: true}, wantProgress: true},
+		{name: "both terminals", terminals: TerminalCapabilities{Stdout: true, Stderr: true}, wantResults: true, wantProgress: true},
+		{name: "no color with both terminals", terminals: TerminalCapabilities{Stdout: true, Stderr: true}, noColor: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := Options{Format: FormatText, Color: ColorAuto, Terminals: test.terminals, NoColor: test.noColor}
+			if got := (Renderer{Options: options}).ColorEnabled(); got != test.wantResults {
+				t.Fatalf("results color = %t, want %t", got, test.wantResults)
+			}
+			if got := options.ProgressColorEnabled(); got != test.wantProgress {
+				t.Fatalf("progress color = %t, want %t", got, test.wantProgress)
 			}
 		})
 	}

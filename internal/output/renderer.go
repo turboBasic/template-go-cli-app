@@ -40,27 +40,16 @@ func DetectTerminalCapabilities(stdout, stderr io.Writer) TerminalCapabilities {
 	return detectTerminalCapabilities(stdout, stderr, isTerminal)
 }
 
-// ColorEnabled reports whether the selected text mode permits ANSI styling.
-func ColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities, noColor bool) bool {
+// ColorEnabled reports whether the selected text mode permits ANSI styling on a stream that is,
+// or is not, a terminal.
+func ColorEnabled(format Format, mode ColorMode, onTerminal, noColor bool) bool {
 	if format == FormatJSON || mode == ColorNever {
 		return false
 	}
 	if mode == ColorAlways {
 		return true
 	}
-	return terminals.Stdout && !noColor
-}
-
-// ProgressColorEnabled reports whether progress on stderr may use ANSI styling. Unlike results,
-// the automatic mode follows stderr, where progress is written.
-func ProgressColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities, noColor bool) bool {
-	if format == FormatJSON || mode == ColorNever {
-		return false
-	}
-	if mode == ColorAlways {
-		return true
-	}
-	return terminals.Stderr && !noColor
+	return onTerminal && !noColor
 }
 
 func isTerminal(writer io.Writer) bool {
@@ -80,6 +69,12 @@ type Options struct {
 	NoColor   bool
 }
 
+// ProgressColorEnabled reports whether progress may use ANSI styling; progress goes to stderr, so
+// the automatic mode follows stderr where results follow stdout.
+func (o Options) ProgressColorEnabled() bool {
+	return ColorEnabled(o.Format, o.Color, o.Terminals.Stderr, o.NoColor)
+}
+
 // Renderer writes resource results in the selected format.
 type Renderer struct {
 	Writer  io.Writer
@@ -88,7 +83,7 @@ type Renderer struct {
 
 // ColorEnabled reports whether this renderer may use ANSI styling.
 func (r Renderer) ColorEnabled() bool {
-	return ColorEnabled(r.Options.Format, r.Options.Color, r.Options.Terminals, r.Options.NoColor)
+	return ColorEnabled(r.Options.Format, r.Options.Color, r.Options.Terminals.Stdout, r.Options.NoColor)
 }
 
 // RenderList writes a resource list.
