@@ -7,5 +7,5 @@ type Secret string
 
 // LogValue prevents the underlying secret from appearing in structured logs.
 func (Secret) LogValue() slog.Value {
-	return slog.StringValue("[REDACTED]")
+	return slog.StringValue(Redacted)
 }
