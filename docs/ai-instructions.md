@@ -30,6 +30,14 @@ Go CLI App Template is GitHub template repository.
 - Never put secret values in command-line arguments, logs, generated output, or configuration inspection.
 - Keep provider credentials out of repository files; use environment variables or workload identity in CI.
 
+## Dependency updates
+
+- Renovate (`.github/renovate.json`) opens every version-update PR: `mise.toml` tools, GitHub Actions and
+  Go modules. Lock file maintenance is disabled, so a lock file changes only with a version bump.
+- Dependabot opens security-update PRs only. `.github/dependabot.yml` sets `open-pull-requests-limit: 0` for
+  each ecosystem, which turns off its version updates and keeps security updates and alerts enabled.
+- Do not add a Dependabot ecosystem without that limit, or a Renovate rule that duplicates one.
+
 ## Repository workflow
 
 Use `just` for project tasks. Run `just lint` after code or configuration changes. `just test` and `just build` are available for implementation work and CI. Keep provider credentials out of repository files; use environment variables or workload identity in CI.
