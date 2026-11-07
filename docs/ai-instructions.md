@@ -32,11 +32,7 @@ Go CLI App Template is GitHub template repository.
 
 ## Dependency updates
 
-- Renovate (`.github/renovate.json`) opens every version-update PR: `mise.toml` tools, GitHub Actions and
-  Go modules. Lock file maintenance is disabled, so a lock file changes only with a version bump.
-- Dependabot opens security-update PRs only. `.github/dependabot.yml` sets `open-pull-requests-limit: 0` for
-  each ecosystem, which turns off its version updates and keeps security updates and alerts enabled.
-- Do not add a Dependabot ecosystem without that limit, or a Renovate rule that duplicates one.
+- Renovate owns version updates. Dependabot owns security updates and alerts only.
 
 ## Repository workflow
 
