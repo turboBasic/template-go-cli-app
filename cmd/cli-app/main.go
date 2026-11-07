@@ -18,6 +18,9 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
+// demoApplyDelay keeps the reference fixture's apply running long enough to show the spinner.
+const demoApplyDelay = time.Second
+
 var version = "dev"
 var commit = "unknown"
 var buildDate = "unknown"
@@ -28,7 +31,7 @@ var (
 )
 
 func main() {
-	resources := memory.NewResourceReader()
+	resources := memory.NewResourceReader(memory.WithApplyDelay(demoApplyDelay))
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		var reader app.ResourceReader = resources
 		if configured := effective.Retry.Resource.Status; configured != nil {
