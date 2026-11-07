@@ -21,9 +21,9 @@ build:
     @mkdir -p dist
     go build -o dist/cli-app ./cmd/cli-app
 
-# Wipes dist/, including the binary `just build` leaves there.
+# Wipes dist/, including the binary `just build` leaves there. Skips signing, which needs an OIDC login.
 release-snapshot:
-    mise exec -- goreleaser release --snapshot --clean
+    mise exec -- goreleaser release --snapshot --clean --skip=sign
     ./scripts/check-release.sh cli-app
 
 check-init:
