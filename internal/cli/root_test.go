@@ -553,6 +553,49 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 	}
 }
 
+func TestApplyProgressColor(t *testing.T) {
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	const plain = "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"
+	for _, test := range []struct {
+		name    string
+		args    []string
+		want    string // exact stderr when it carries no escape
+		styled  bool
+		wantEnd string
+	}{
+		{name: "redirected default", want: plain},
+		{name: "never", args: []string{"--color", "never"}, want: plain},
+		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, want: plain},
+		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}},
+		{name: "always", args: []string{"--color", "always"}, styled: true, wantEnd: "✓ Resource applied (1/1)\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			command := NewRootCommand(memory.NewResourceReader(), testBuildInfo(), memory.NewResourceReader().Names())
+			command.SetArgs(append(append([]string{}, test.args...), "resource", "apply", "example-2"))
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			got := stderr.String()
+			if !test.styled {
+				if got != test.want {
+					t.Fatalf("stderr = %q, want %q", got, test.want)
+				}
+				return
+			}
+			if !strings.Contains(got, "\x1b[") {
+				t.Fatalf("stderr = %q, want ANSI escapes", got)
+			}
+			if stripped := ansi.ReplaceAllString(got, ""); !strings.HasSuffix(stripped, test.wantEnd) {
+				t.Fatalf("stripped stderr = %q, want suffix %q", stripped, test.wantEnd)
+			}
+		})
+	}
+}
+
 func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
 	setupConfigEnvironment(t)
 	command := NewRootCommand(failingResourceReader{}, testBuildInfo(), memory.NewResourceReader().Names())

@@ -51,6 +51,18 @@ func ColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities,
 	return terminals.Stdout && !noColor
 }
 
+// ProgressColorEnabled reports whether progress on stderr may use ANSI styling. Unlike results,
+// the automatic mode follows stderr, where progress is written.
+func ProgressColorEnabled(format Format, mode ColorMode, terminals TerminalCapabilities, noColor bool) bool {
+	if format == FormatJSON || mode == ColorNever {
+		return false
+	}
+	if mode == ColorAlways {
+		return true
+	}
+	return terminals.Stderr && !noColor
+}
+
 func isTerminal(writer io.Writer) bool {
 	file, ok := writer.(*os.File)
 	return ok && isTerminalFile(file)

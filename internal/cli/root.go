@@ -68,6 +68,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	var renderer output.Renderer
 	var logResult logging.Result
 	var cancelOperation context.CancelFunc
+	var stopProgress func()
 	var cleanupDependencies func(context.Context) error
 	cleanupTimeout := config.Defaults().Timeouts.Cleanup
 	var cleanupComplete bool
@@ -76,6 +77,10 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			return nil
 		}
 		cleanupComplete = true
+		if stopProgress != nil {
+			stopProgress()
+			stopProgress = nil
+		}
 		if cancelOperation != nil {
 			cancelOperation()
 			cancelOperation = nil
@@ -106,6 +111,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		}
 		cleanupComplete = false
 		resources = nil
+		stopProgress = nil
 		renderer = output.Renderer{}
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
@@ -148,8 +154,13 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			return fmt.Errorf("initialize logging: %w", err)
 		}
 		var progressReporter app.ProgressReporter = output.NewPlainProgressReporter(cmd.ErrOrStderr())
-		if loaded.Config.Quiet {
+		switch {
+		case loaded.Config.Quiet:
 			progressReporter = output.NoopProgressReporter{}
+		case output.ProgressColorEnabled(renderer.Options.Format, renderer.Options.Color, renderer.Options.Terminals, noColor):
+			styled := output.NewStyledProgressReporter(cmd.ErrOrStderr())
+			stopProgress = styled.Close
+			progressReporter = styled
 		}
 		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Resource); timeout != nil {
 			parentContext := cmd.Context()
