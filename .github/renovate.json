@@ -20,7 +20,7 @@
       "enabled": false
     },
     {
-      "description": "Dev tools only run in lint and CI, where a breaking release fails the required check.",
+      "description": "Dev tools only run in lint and CI, where a breaking release fails the required check. Must stay before the go rule, which excludes itself from it.",
       "matchManagers": ["mise"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
