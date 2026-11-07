@@ -53,6 +53,9 @@ homebrew_casks:
       token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
     homepage: 'https://github.com/{{ index .Env "GITHUB_REPOSITORY" }}'
     description: '{{ .ProjectName }} command-line tool'
+    caveats: |
+      {{ .ProjectName }} is not signed or notarized by Apple. If macOS blocks it, run:
+        xattr -d com.apple.quarantine "$(which {{ .ProjectName }})"
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
 
 release:
