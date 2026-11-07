@@ -30,6 +30,10 @@ Go CLI App Template is GitHub template repository.
 - Never put secret values in command-line arguments, logs, generated output, or configuration inspection.
 - Keep provider credentials out of repository files; use environment variables or workload identity in CI.
 
+## Dependency updates
+
+- Renovate owns version updates. Dependabot owns security updates and alerts only.
+
 ## Repository workflow
 
 Use `just` for project tasks. Run `just lint` after code or configuration changes. `just test` and `just build` are available for implementation work and CI. Keep provider credentials out of repository files; use environment variables or workload identity in CI.

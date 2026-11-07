@@ -15,3 +15,5 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps
+    # Renovate handles version updates; zero leaves Dependabot security updates enabled.
+    open-pull-requests-limit: 0
