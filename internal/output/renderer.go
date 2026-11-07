@@ -104,7 +104,7 @@ func (r Renderer) RenderList(resources []domain.Resource) error {
 	}
 
 	var table bytes.Buffer
-	writer := tabwriter.NewWriter(&table, 12, 8, 0, ' ', 0)
+	writer := tabwriter.NewWriter(&table, 12, 8, 1, ' ', 0)
 	if _, err := fmt.Fprintln(writer, "NAME\tSTATUS"); err != nil {
 		return fmt.Errorf("write resource list: %w", err)
 	}
