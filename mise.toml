@@ -35,6 +35,9 @@ run = "just coverage"
 [tasks.build]
 run = "just build"
 
+[tasks.release-snapshot]
+run = "just release-snapshot"
+
 [tasks.init]
 description = "Initialize a generated project"
 usage = '''
