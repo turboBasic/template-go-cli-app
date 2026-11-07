@@ -28,13 +28,13 @@
     {
       "description": "The Go toolchain builds the binary, so it stays manual.",
       "matchManagers": ["mise"],
-      "matchPackageNames": ["go"],
+      "matchDepNames": ["go"],
       "automerge": false
     },
     {
       "description": "Cosign runs only on tag builds, so no required check exercises a bump; it stays manual.",
       "matchManagers": ["mise"],
-      "matchPackageNames": ["cosign"],
+      "matchDepNames": ["cosign"],
       "automerge": false
     },
     {
