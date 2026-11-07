@@ -66,6 +66,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected resource operation")
 	var resources *app.ResourceService
 	var renderer output.Renderer
+	var loadResult config.LoadResult
 	var logResult logging.Result
 	var cancelOperation context.CancelFunc
 	var stopProgress func()
@@ -113,6 +114,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		resources = nil
 		stopProgress = nil
 		renderer = output.Renderer{}
+		loadResult = config.LoadResult{}
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
@@ -138,6 +140,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
 		}
+		loadResult = loaded
 		cleanupTimeout = loaded.Config.Timeouts.Cleanup
 		_, noColor := os.LookupEnv("NO_COLOR")
 		renderer = output.Renderer{
@@ -197,7 +200,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	closeAfterRun(status, cleanup)
 	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
-	root.AddCommand(resource)
+	root.AddCommand(resource, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	return root
 }
 
