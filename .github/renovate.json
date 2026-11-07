@@ -32,6 +32,12 @@
       "automerge": false
     },
     {
+      "description": "Cosign runs only on tag builds, so no required check exercises a bump; it stays manual.",
+      "matchManagers": ["mise"],
+      "matchPackageNames": ["cosign"],
+      "automerge": false
+    },
+    {
       "description": "Renovate's sandbox has no uv, so mise lock there writes no sidecar for a pipx pin and mise install --locked fails on the PR; bump these by hand with mise lock.",
       "matchDepNames": ["pipx:commitizen", "pipx:yamllint"],
       "enabled": false
