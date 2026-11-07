@@ -15,9 +15,11 @@ gofmt
 goimports
 golangci
 gomod
+goreleaser
 jactionlint
 knadh
 Koanf
+ldflags
 lipgloss
 Melnyk
 Mise
