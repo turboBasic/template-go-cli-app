@@ -42,6 +42,13 @@ just build
 See the [architecture specification][architecture] for the planned application structure and
 capabilities. [Contributing][contributing] covers setup and pull requests.
 
+### Releases
+
+`just release-snapshot` builds and verifies the four Linux and macOS archives locally with
+GoReleaser; it wipes `dist/`, including the binary `just build` leaves there. Pushing a `vX.Y.Z`
+tag publishes a GitHub Release through `.github/workflows/release.yml`, using `.goreleaser.yaml`.
+A generated repository releases under its own name after `mise run init`.
+
 ## License
 
 [MIT][license].
