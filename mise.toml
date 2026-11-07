@@ -38,6 +38,9 @@ run = "just build"
 [tasks.release-snapshot]
 run = "just release-snapshot"
 
+[tasks.check-init]
+run = "just check-init"
+
 [tasks.init]
 description = "Initialize a generated project"
 usage = '''

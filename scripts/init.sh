@@ -79,7 +79,7 @@ validate_markers() {
 
   require_marker_or_value "$repo_root/go.mod" 'github.com/turboBasic/template-go-cli-app' "$module_path"
   require_readme_title "$repo_root/README.md" "$project_name"
-  for path in "$repo_root/README.md" "$repo_root/SECURITY.md" "$repo_root/justfile" "$repo_root/docs/architecture-specification.md"; do
+  for path in "$repo_root/README.md" "$repo_root/SECURITY.md" "$repo_root/justfile" "$repo_root/.goreleaser.yaml" "$repo_root/docs/architecture-specification.md"; do
     require_marker_or_value "$path" 'cli-app' "$config_id"
   done
   require_marker_or_value "$repo_root/internal/cli/root.go" 'configID = "cli-app"' "configID = \"$config_id\""
@@ -101,7 +101,7 @@ stage_changes() {
   local index=0
   local path
 
-  for path in "$repo_root/go.mod" "$repo_root/README.md" "$repo_root/SECURITY.md" "$repo_root/justfile" "$repo_root/docs/architecture-specification.md"; do
+  for path in "$repo_root/go.mod" "$repo_root/README.md" "$repo_root/SECURITY.md" "$repo_root/justfile" "$repo_root/.goreleaser.yaml" "$repo_root/docs/architecture-specification.md"; do
     staged_paths+=("$temporary_dir/$index")
     target_paths+=("$path")
     cp -p "$path" "$temporary_dir/$index"
