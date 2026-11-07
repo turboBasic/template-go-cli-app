@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -35,11 +36,15 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
+	credential, err := s.resolveCredential(ctx)
+	if err != nil {
+		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
+	}
 	s.reportProgress(ProgressEvent{Phase: "applying", Message: "Applying resource"})
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
-	resource, err := s.reader.Apply(ctx, name, "")
+	resource, err := s.reader.Apply(ctx, name, credential)
 	if err != nil {
 		return domain.Resource{}, fmt.Errorf("apply resource: %w", classifyDeadline(err))
 	}
@@ -58,6 +63,17 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 	}
 	s.reportProgress(ProgressEvent{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"})
 	return resource, nil
+}
+
+// resolveCredential resolves the configured reference once, only when one is set.
+func (s *ResourceService) resolveCredential(ctx context.Context) (logging.Secret, error) {
+	if s.credentialRef == "" {
+		return "", nil
+	}
+	if s.resolver == nil {
+		return "", Classify(ErrValidation, errors.New("no secret provider configured"))
+	}
+	return s.resolver.Resolve(ctx, s.credentialRef)
 }
 
 func (s *ResourceService) reportProgress(event ProgressEvent) {
