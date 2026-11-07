@@ -225,7 +225,7 @@ url_api = "https://api.github.com/repos/casey/just/releases/assets/643131303"
 
 [[tools."npm:cspell-cli"]]
 version = "10.4.0"
-aube = { path = ".mise/locks/npm-cspell-cli/10.4.0", digest = "sha256:7c3ccd2d5c20c73a15cd1a899478fb85b1924024f63fa6b36c0d10df9e463a5a" }
+aube = { path = ".mise/locks/npm-cspell-cli/10.4.0", digest = "sha256:ae8b9d735a9702225c8dfb619b11ec4b8131dfc83379402e84fee1386341f155" }
 backend = "npm:cspell-cli"
 specifiers = ["10.4.0"]
 
