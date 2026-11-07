@@ -65,3 +65,18 @@ func TestRenderConfigJSON(t *testing.T) {
 		t.Errorf("quiet row = %v, want boolean true from flag --quiet", items[2])
 	}
 }
+
+func TestRenderConfigJSONKeepsDurationsAsStrings(t *testing.T) {
+	var out bytes.Buffer
+	renderer := Renderer{Writer: &out, Options: Options{Format: FormatJSON}}
+	if err := renderer.RenderConfig([]config.Entry{{Key: "timeouts.cleanup", Value: "5s", Source: config.KindDefault}}); err != nil {
+		t.Fatal(err)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &items); err != nil {
+		t.Fatal(err)
+	}
+	if items[0]["value"] != "5s" {
+		t.Errorf("value = %#v, want the string \"5s\"", items[0]["value"])
+	}
+}

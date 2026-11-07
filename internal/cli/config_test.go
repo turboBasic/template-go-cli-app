@@ -102,10 +102,17 @@ func TestConfigShowReportsEverySource(t *testing.T) {
 			t.Errorf("text output missing %q:\n%s", line, text)
 		}
 	}
+	sawOutput := false
 	for _, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(line, "output ") && !strings.HasSuffix(line, "default") {
-			t.Errorf("output row = %q, want source default", line)
+		if strings.HasPrefix(line, "output ") {
+			sawOutput = true
+			if !strings.HasSuffix(line, "default") {
+				t.Errorf("output row = %q, want source default", line)
+			}
 		}
+	}
+	if !sawOutput {
+		t.Errorf("text output has no output row:\n%s", text)
 	}
 }
 
