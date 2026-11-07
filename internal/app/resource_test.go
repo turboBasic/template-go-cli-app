@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 type fakeResourceReader struct {
@@ -26,7 +27,7 @@ func (r fakeResourceReader) Status(context.Context, string) (domain.Resource, er
 	return r.resource, r.err
 }
 
-func (r fakeResourceReader) Apply(ctx context.Context, name string) (domain.Resource, error) {
+func (r fakeResourceReader) Apply(ctx context.Context, name string, _ logging.Secret) (domain.Resource, error) {
 	if r.apply != nil {
 		return r.apply(ctx, name)
 	}

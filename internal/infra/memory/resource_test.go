@@ -47,7 +47,7 @@ func TestResourceReaderStatusAndApply(t *testing.T) {
 	if err != nil || resource.Status != "pending" {
 		t.Fatalf("Status() = (%#v, %v), want pending resource", resource, err)
 	}
-	resource, err = reader.Apply(context.Background(), "example-2")
+	resource, err = reader.Apply(context.Background(), "example-2", "")
 	if err != nil || resource.Status != "ready" {
 		t.Fatalf("Apply() = (%#v, %v), want ready resource", resource, err)
 	}
@@ -62,7 +62,7 @@ func TestResourceReaderRejectsUnknownResource(t *testing.T) {
 	if _, err := reader.Status(context.Background(), "missing"); err != domain.ErrResourceNotFound {
 		t.Fatalf("Status() error = %v, want resource not found", err)
 	}
-	if _, err := reader.Apply(context.Background(), "missing"); err != domain.ErrResourceNotFound {
+	if _, err := reader.Apply(context.Background(), "missing", ""); err != domain.ErrResourceNotFound {
 		t.Fatalf("Apply() error = %v, want resource not found", err)
 	}
 }
@@ -71,7 +71,7 @@ func TestResourceReaderApplyDelay(t *testing.T) {
 	t.Run("waits for the delay", func(t *testing.T) {
 		reader := NewResourceReader(WithApplyDelay(50 * time.Millisecond))
 		start := time.Now()
-		resource, err := reader.Apply(context.Background(), "example-2")
+		resource, err := reader.Apply(context.Background(), "example-2", "")
 		if err != nil || resource.Status != "ready" {
 			t.Fatalf("Apply() = %#v, %v; want ready", resource, err)
 		}
@@ -85,7 +85,7 @@ func TestResourceReaderApplyDelay(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		time.AfterFunc(10*time.Millisecond, cancel)
 		start := time.Now()
-		_, err := reader.Apply(ctx, "example-2")
+		_, err := reader.Apply(ctx, "example-2", "")
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Apply() error = %v, want context.Canceled", err)
 		}

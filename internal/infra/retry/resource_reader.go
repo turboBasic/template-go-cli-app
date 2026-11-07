@@ -7,6 +7,7 @@ import (
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 var _ app.ResourceReader = (*ResourceReader)(nil)
@@ -52,6 +53,6 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 }
 
 // Apply delegates without retrying the mutating operation.
-func (r *ResourceReader) Apply(ctx context.Context, name string) (domain.Resource, error) {
-	return r.reader.Apply(ctx, name)
+func (r *ResourceReader) Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error) {
+	return r.reader.Apply(ctx, name, credential)
 }

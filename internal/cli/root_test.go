@@ -22,6 +22,7 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 func TestResourceListCommand(t *testing.T) {
@@ -729,7 +730,7 @@ func (failingResourceReader) Status(context.Context, string) (domain.Resource, e
 	return domain.Resource{}, errors.New("injected reader failure")
 }
 
-func (failingResourceReader) Apply(context.Context, string) (domain.Resource, error) {
+func (failingResourceReader) Apply(context.Context, string, logging.Secret) (domain.Resource, error) {
 	return domain.Resource{}, errors.New("injected reader failure")
 }
 

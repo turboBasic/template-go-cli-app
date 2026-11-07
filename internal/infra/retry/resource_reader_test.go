@@ -8,6 +8,7 @@ import (
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
+	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 type statusReader struct {
@@ -24,7 +25,7 @@ func (r *statusReader) Status(context.Context, string) (domain.Resource, error) 
 	return r.status(r.statusCalls)
 }
 
-func (r *statusReader) Apply(context.Context, string) (domain.Resource, error) {
+func (r *statusReader) Apply(context.Context, string, logging.Secret) (domain.Resource, error) {
 	r.applyCalls++
 	return domain.Resource{}, r.applyErr
 }
@@ -73,7 +74,7 @@ func TestResourceReaderDoesNotRetryApplyWithoutSafePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = wrapped.Apply(context.Background(), "example")
+	_, err = wrapped.Apply(context.Background(), "example", "")
 	if !errors.Is(err, wantErr) || reader.applyCalls != 1 {
 		t.Fatalf("Apply() error = %v, attempts = %d, want one un-retried call", err, reader.applyCalls)
 	}
