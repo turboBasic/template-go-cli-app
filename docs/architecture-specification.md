@@ -53,13 +53,12 @@ A reasonable layout is:
 ```text
 cmd/cli-app/main.go
 internal/cli/{root,resource,config}.go                  # Cobra commands and command wiring
-internal/app/{resource,progress}.go                     # use cases and orchestration
+internal/app/{resource,progress,secret}.go              # use cases, orchestration and the secret resolver interface
 internal/domain/{resource}.go                           # models, invariants and business rules
 internal/config/{config,load,provenance,validate}.go    # loading, source metadata and validation
 internal/logging/{setup,redact,fanout}.go               # slog setup, redaction and destinations
 internal/output/{renderer,terminal,progress}.go         # result rendering, terminal capabilities and progress
-internal/infra/{fixture,retry}/                         # external-facing adapters and simulated fixture
-internal/secrets/{resolver.go,onepassword/}             # secret abstraction and 1Password adapter
+internal/infra/{fixture,retry,onepassword}/            # external-facing adapters, simulated fixture and 1Password adapter
 test/fixtures/
 docs/architecture-specification.md
 docs/decisions/
