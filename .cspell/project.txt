@@ -27,6 +27,7 @@ onepassword
 pipx
 prek
 Roosty
+sboms
 Sigstore
 syft
 taplo
