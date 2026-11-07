@@ -17,6 +17,7 @@ gomod
 jactionlint
 knadh
 Koanf
+lipgloss
 Melnyk
 Mise
 onepassword
