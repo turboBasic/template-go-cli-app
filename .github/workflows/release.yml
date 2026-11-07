@@ -23,6 +23,9 @@ jobs:
           cache: false
           minimum_release_age: 24h
 
+      - name: Test the tagged commit
+        run: mise run test
+
       - name: Publish the GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
