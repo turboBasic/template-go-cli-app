@@ -37,18 +37,50 @@ jobs:
       run-coverage: ${{ matrix.goos == 'linux' && matrix.goarch == 'amd64' }}
       run-typecheck: false
 
-  checks:
-    name: checks
-    if: always()
-    needs: [platforms]
+  release:
+    name: release
     runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
-      - name: Require all platform checks to pass
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          minimum_release_age: 24h
+
+      # mise-action caches the tool installs only; module downloads and compiled packages live outside it.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build and verify a release snapshot
+        run: mise run release-snapshot
+
+      - name: Verify initialization renames the release configuration
+        run: mise run check-init
+
+  checks:
+    name: checks
+    if: always()
+    needs: [platforms, release]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Require all platform and release checks to pass
         env:
           PLATFORMS_RESULT: ${{ needs.platforms.result }}
-        run: test "$PLATFORMS_RESULT" = success
+          RELEASE_RESULT: ${{ needs.release.result }}
+        run: |
+          test "$PLATFORMS_RESULT" = success
+          test "$RELEASE_RESULT" = success
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
