@@ -24,6 +24,13 @@ func TestRendererText(t *testing.T) {
 			want: "NAME        STATUS\nexample-1   ready\nexample-2   pending\n",
 		},
 		{
+			name: "list with names of 12 or more characters keeps a gap before the status",
+			run: func(renderer *Renderer) error {
+				return renderer.RenderList([]domain.Resource{{Name: "twelve-chars", Status: "ready"}, {Name: "a-fourteen-char", Status: "ready"}})
+			},
+			want: "NAME            STATUS\ntwelve-chars    ready\na-fourteen-char ready\n",
+		},
+		{
 			name: "resource",
 			run:  func(renderer *Renderer) error { return renderer.RenderResource(resources[0]) },
 			want: "example-1: ready\n",
