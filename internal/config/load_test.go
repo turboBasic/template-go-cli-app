@@ -80,3 +80,31 @@ func TestMergeLayerRecursivelyAndReplacesArrays(t *testing.T) {
 		t.Fatalf("sources = %#v, want %#v", sources, wantSources)
 	}
 }
+
+func TestEveryEffectiveLeafHasASource(t *testing.T) {
+	root := t.TempDir()
+	userPath := filepath.Join(root, "user.toml")
+	data := "[timeouts.resource]\nlist = '3s'\n[retry.resource.status]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '2s'\njitter = 0.5\n"
+	if err := os.WriteFile(userPath, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadFiles(ConfigFiles{User: userPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Sources["timeouts.cleanup"] != defaultSource {
+		t.Errorf("source for timeouts.cleanup = %q, want %q", got.Sources["timeouts.cleanup"], defaultSource)
+	}
+	if got.Config.Timeouts.Cleanup != 5*time.Second {
+		t.Errorf("Timeouts.Cleanup = %s, want 5s", got.Config.Timeouts.Cleanup)
+	}
+	if got.Sources["timeouts.resource.list"] != Source(userPath) || got.Sources["retry.resource.status.max_attempts"] != Source(userPath) {
+		t.Errorf("user-file sources = %q, %q, want %q", got.Sources["timeouts.resource.list"], got.Sources["retry.resource.status.max_attempts"], userPath)
+	}
+	for _, leaf := range leaves(got.values) {
+		if got.Sources[leaf.key] == "" {
+			t.Errorf("leaf %q has no source", leaf.key)
+		}
+	}
+}

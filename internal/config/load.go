@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 )
 
 // Source identifies the configuration layer that supplied an effective value.
@@ -37,13 +38,9 @@ func mergeFiles(files ConfigFiles) (LoadResult, error) {
 
 func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadResult, error) {
 	values := defaultValues()
-	sources := map[string]Source{
-		"log.console.level": defaultSource,
-		"log.file.level":    defaultSource,
-		"log.file.path":     defaultSource,
-		"output":            defaultSource,
-		"color":             defaultSource,
-		"quiet":             defaultSource,
+	sources := make(map[string]Source)
+	for _, leaf := range leaves(values) {
+		sources[leaf.key] = defaultSource
 	}
 	for _, path := range []string{files.User, files.Project} {
 		if path == "" {
@@ -69,10 +66,39 @@ func defaultValues() map[string]any {
 			"console": map[string]any{"level": config.Log.Console.Level},
 			"file":    map[string]any{"path": config.Log.File.Path, "level": config.Log.File.Level},
 		},
-		"output": config.Output,
-		"color":  config.Color,
-		"quiet":  config.Quiet,
+		"output":   config.Output,
+		"color":    config.Color,
+		"quiet":    config.Quiet,
+		"timeouts": map[string]any{"cleanup": config.Timeouts.Cleanup},
 	}
+}
+
+type leaf struct {
+	key   string
+	value any
+}
+
+// leaves walks nested maps depth-first in key order and returns each non-map value under its dotted key.
+func leaves(values map[string]any) []leaf {
+	var result []leaf
+	var walk func(prefix string, group map[string]any)
+	walk = func(prefix string, group map[string]any) {
+		keys := make([]string, 0, len(group))
+		for key := range group {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			path := prefix + key
+			if nested, ok := group[key].(map[string]any); ok {
+				walk(path+".", nested)
+				continue
+			}
+			result = append(result, leaf{key: path, value: group[key]})
+		}
+	}
+	walk("", values)
+	return result
 }
 
 func mergeLayer(values, layer map[string]any, source Source, sources map[string]Source) {
