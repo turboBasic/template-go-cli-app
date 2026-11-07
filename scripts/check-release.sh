@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Assert that a GoReleaser snapshot in dist/ holds the four release archives, a valid
-# checksums.txt and a host binary that carries its injected version.
+# Assert that a GoReleaser snapshot in dist/ holds the four release archives, their four SPDX
+# SBOMs, a checksums.txt covering all eight and a host binary that carries its injected version.
 #
 # Usage:
 #   ./scripts/check-release.sh <binary-name>
@@ -23,6 +23,7 @@ main() {
   trap 'rm -rf "$SCRATCH"' EXIT
 
   check_archives "$name"
+  check_sboms "$name"
   check_checksums
   check_host_version "$name"
   echo "release snapshot OK"
@@ -43,11 +44,19 @@ check_archives() {
   done
 }
 
+check_sboms() {
+  local name="$1" archive
+  for archive in "${name}"_*.tar.gz; do
+    [[ -f "$archive.spdx.json" ]] || fail "missing SBOM $archive.spdx.json"
+    grep -q '"spdxVersion"' "$archive.spdx.json" || fail "$archive.spdx.json has no spdxVersion"
+  done
+}
+
 check_checksums() {
   local lines
   [[ -f checksums.txt ]] || fail "missing checksums.txt"
   lines="$(wc -l <checksums.txt)"
-  ((lines == 4)) || fail "checksums.txt has $lines lines, want 4"
+  ((lines == 8)) || fail "checksums.txt has $lines lines, want 8 (four archives, four SBOMs)"
   shasum -a 256 -c checksums.txt >/dev/null || fail "checksums.txt does not match the archives"
 }
 

@@ -47,7 +47,9 @@ capabilities. [Contributing][contributing] covers setup and pull requests.
 `just release-snapshot` builds and verifies the four Linux and macOS archives locally with
 GoReleaser; it wipes `dist/`, including the binary `just build` leaves there. Pushing a `vX.Y.Z`
 tag publishes a GitHub Release through `.github/workflows/release.yml`, using `.goreleaser.yaml`.
-A generated repository releases under its own name after `mise run init`.
+A generated repository releases under its own name after `mise run init`. Releases carry SPDX
+SBOMs, a `checksums.txt` signed with keyless Cosign and, for public repositories, a provenance
+attestation; the signing is not Apple notarization, and builds are not reproducible.
 
 ## License
 
