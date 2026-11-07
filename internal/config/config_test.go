@@ -76,3 +76,30 @@ func TestConfigValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestCredentialValidate(t *testing.T) {
+	for _, test := range []struct {
+		name, value, want string
+	}{
+		{name: "empty", value: ""},
+		{name: "reference", value: "op://vault/item/field"},
+		{name: "plain secret", value: "hunter2", want: "resource.credential"},
+		{name: "scheme only", value: "op://", want: "resource.credential"},
+		{name: "rest only", value: "://x", want: "resource.credential"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := Defaults()
+			config.Resource.Credential = test.value
+			err := config.Validate()
+			if test.want == "" && err != nil {
+				t.Fatalf("Validate() error = %v", err)
+			}
+			if test.want != "" && (err == nil || !strings.Contains(err.Error(), test.want)) {
+				t.Fatalf("Validate() error = %v, want it to contain %q", err, test.want)
+			}
+			if err != nil && strings.Contains(err.Error(), test.value) && test.value != "" {
+				t.Fatalf("Validate() error %q echoes the value", err)
+			}
+		})
+	}
+}

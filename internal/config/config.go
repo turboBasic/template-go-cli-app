@@ -3,18 +3,26 @@ package config
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
 // Config contains the supported Stage 1 application settings.
 type Config struct {
-	LogLevel string        `koanf:"-"` // Deprecated: use Log.Console.Level.
-	Log      LogConfig     `koanf:"log"`
-	Output   string        `koanf:"output"`
-	Color    string        `koanf:"color"`
-	Quiet    bool          `koanf:"quiet"`
-	Timeouts TimeoutConfig `koanf:"timeouts"`
-	Retry    RetryConfig   `koanf:"retry"`
+	LogLevel string         `koanf:"-"` // Deprecated: use Log.Console.Level.
+	Log      LogConfig      `koanf:"log"`
+	Output   string         `koanf:"output"`
+	Color    string         `koanf:"color"`
+	Quiet    bool           `koanf:"quiet"`
+	Timeouts TimeoutConfig  `koanf:"timeouts"`
+	Retry    RetryConfig    `koanf:"retry"`
+	Resource ResourceConfig `koanf:"resource"`
+}
+
+// ResourceConfig holds settings for resource operations.
+type ResourceConfig struct {
+	// Credential is a secret reference such as op://vault/item/field, never the secret itself.
+	Credential string `koanf:"credential"`
 }
 
 // RetryConfig holds opt-in policies for individually approved operations.
@@ -115,6 +123,11 @@ func (c Config) Validate() error {
 		}
 		if math.IsNaN(policy.Jitter) || policy.Jitter < 0 || policy.Jitter > 1 {
 			return fmt.Errorf("invalid retry.resource.status.jitter: must be between 0 and 1")
+		}
+	}
+	if ref := c.Resource.Credential; ref != "" {
+		if scheme, rest, ok := strings.Cut(ref, "://"); !ok || scheme == "" || rest == "" {
+			return fmt.Errorf("invalid resource.credential: must be a scheme://reference, not the secret itself")
 		}
 	}
 	return nil

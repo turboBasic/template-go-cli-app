@@ -101,6 +101,8 @@ func environmentKey(name string) string {
 		return "retry.resource.status.max_delay"
 	case "CLI_APP_RETRY_RESOURCE_STATUS_JITTER":
 		return "retry.resource.status.jitter"
+	case "CLI_APP_RESOURCE_CREDENTIAL":
+		return "resource.credential"
 	default:
 		return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
 	}

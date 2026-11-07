@@ -113,3 +113,32 @@ func writeFile(t *testing.T, path, contents string) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
+	userPath := filepath.Join(t.TempDir(), "user.toml")
+	if err := os.WriteFile(userPath, []byte("[resource]\ncredential = 'op://file/item/field'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name       string
+		env        []string
+		want, from string
+	}{
+		{name: "file", want: "op://file/item/field", from: userPath},
+		{name: "environment", env: []string{"CLI_APP_RESOURCE_CREDENTIAL=op://env/item/field"}, want: "op://env/item/field", from: "CLI_APP_RESOURCE_CREDENTIAL"},
+		{name: "empty environment clears", env: []string{"CLI_APP_RESOURCE_CREDENTIAL="}, want: "", from: "CLI_APP_RESOURCE_CREDENTIAL"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := load(ConfigFiles{User: userPath}, test.env, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Config.Resource.Credential != test.want || got.Sources["resource.credential"] != Source(test.from) {
+				t.Fatalf("credential/source = %q/%q, want %q/%q", got.Config.Resource.Credential, got.Sources["resource.credential"], test.want, test.from)
+			}
+		})
+	}
+	if _, err := load(ConfigFiles{}, []string{"CLI_APP_RESOURCE_CREDENTIAL=hunter2"}, nil); err == nil || !strings.Contains(err.Error(), "resource.credential") {
+		t.Fatalf("load() error = %v, want a resource.credential validation error", err)
+	}
+}
