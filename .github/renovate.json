@@ -13,5 +13,8 @@
       "matchPackageNames": ["turboBasic/**"],
       "enabled": false
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "enabled": false
+  }
 }
