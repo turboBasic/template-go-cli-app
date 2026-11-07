@@ -58,38 +58,41 @@ func (r *PlainProgressReporter) Report(event app.ProgressEvent) {
 }
 
 // StyledProgressReporter shows styled progress: a colored phase label with faint detail and a check
-// mark in place of the label on completion. Animated, it shows a spinner on the current phase until
-// completion or Close; otherwise it writes one line per event.
+// mark in place of the label on completion. Animated, it shows a spinner on the current phase from
+// the first progress event until completion or Close; otherwise it writes one line per event.
 type StyledProgressReporter struct {
 	mu      sync.Mutex
 	writer  io.Writer
 	styles  styles
 	gate    completionGate
-	program *tea.Program // nil when not animating or once stopped
+	animate bool         // false once stopped, so completion is never followed by a new spinner
+	program *tea.Program // nil until the first progress event and after stopping
 	done    chan struct{}
 	closed  bool
 }
 
-// NewStyledProgressReporter constructs a styled reporter for the given writer. Animate starts a
-// Bubble Tea program on the writer, which must therefore be a terminal; Close stops it.
+// NewStyledProgressReporter constructs a styled reporter for the given writer. Animate shows a
+// Bubble Tea spinner on the writer, which must therefore be a terminal; Close stops it.
 func NewStyledProgressReporter(writer io.Writer, animate bool) *StyledProgressReporter {
 	if writer == nil {
 		writer = io.Discard
 	}
-	r := &StyledProgressReporter{writer: writer, styles: newStyles()}
-	if animate {
-		// The program owns neither input nor signals: main keeps SIGINT and the exit codes.
-		r.program = tea.NewProgram(
-			spinnerModel{spinner: spinner.New(spinner.WithStyle(r.styles.phase)), styles: r.styles},
-			tea.WithInput(nil), tea.WithoutSignalHandler(), tea.WithOutput(writer),
-		)
-		r.done = make(chan struct{})
-		go func() {
-			defer close(r.done)
-			_, _ = r.program.Run()
-		}()
-	}
-	return r
+	return &StyledProgressReporter{writer: writer, styles: newStyles(), animate: animate}
+}
+
+// startProgram runs the spinner; a command that reports no progress never reaches it, so it never
+// touches the terminal.
+func (r *StyledProgressReporter) startProgram() {
+	// The program owns neither input nor signals: main keeps SIGINT and the exit codes.
+	r.program = tea.NewProgram(
+		spinnerModel{spinner: spinner.New(spinner.WithStyle(r.styles.phase)), styles: r.styles},
+		tea.WithInput(nil), tea.WithoutSignalHandler(), tea.WithOutput(r.writer),
+	)
+	r.done = make(chan struct{})
+	go func(program *tea.Program, done chan struct{}) {
+		defer close(done)
+		_, _ = program.Run()
+	}(r.program, r.done)
 }
 
 // Report shows one progress event, ignoring writer errors. It does nothing after Close.
@@ -100,7 +103,10 @@ func (r *StyledProgressReporter) Report(event app.ProgressEvent) {
 	if r.closed || r.gate.skip(event) {
 		return
 	}
-	if r.program != nil && !isComplete(event) {
+	if r.animate && !isComplete(event) {
+		if r.program == nil {
+			r.startProgram()
+		}
 		r.program.Send(labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event)})
 		return
 	}
@@ -124,6 +130,7 @@ func (r *StyledProgressReporter) stopProgram() {
 	r.program.Send(stopMsg{})
 	<-r.done
 	r.program = nil
+	r.animate = false
 }
 
 type labelMsg struct{ phase, detail string }

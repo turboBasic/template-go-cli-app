@@ -175,10 +175,22 @@ func TestAnimatedProgressReporterRestoresTheTerminal(t *testing.T) {
 		reporter := NewStyledProgressReporter(&out, true)
 		within(t, reporter.Close)
 		within(t, reporter.Close)
-		before := out.String()
+		if out.Len() != 0 {
+			t.Fatalf("output after Close without progress = %q, want none", out.String())
+		}
 		within(t, func() { reporter.Report(applying) })
-		if out.String() != before {
-			t.Fatalf("output after Close = %q, want %q", out.String(), before)
+		if out.Len() != 0 {
+			t.Fatalf("output after Close and Report = %q, want none", out.String())
+		}
+	})
+
+	t.Run("a completion event alone never starts the spinner", func(t *testing.T) {
+		var out bytes.Buffer
+		reporter := NewStyledProgressReporter(&out, true)
+		reporter.Report(app.ProgressEvent{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"})
+		within(t, reporter.Close)
+		if got := stripANSI(out.String()); got != "✓ Resource applied (1/1)\n" || strings.Contains(out.String(), hideCursor) {
+			t.Fatalf("output = %q, want only the completion line and no terminal control", out.String())
 		}
 	})
 }
