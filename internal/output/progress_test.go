@@ -94,6 +94,39 @@ func TestPlainProgressReporterSerializesConcurrentCalls(t *testing.T) {
 	}
 }
 
+func TestStyledProgressReporter(t *testing.T) {
+	var out bytes.Buffer
+	reporter := NewStyledProgressReporter(&out)
+	reporter.Report(app.ProgressEvent{Phase: "applying", Message: "Applying resource"})
+	complete := app.ProgressEvent{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"}
+	reporter.Report(complete)
+	reporter.Report(complete)
+	if !strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("output = %q, want ANSI escapes", out.String())
+	}
+	if got, want := stripANSI(out.String()), "applying Applying resource\n✓ Resource applied (1/1)\n"; got != want {
+		t.Fatalf("stripped output = %q, want %q", got, want)
+	}
+}
+
+func TestStyledProgressReporterSerializesConcurrentCalls(t *testing.T) {
+	var out bytes.Buffer
+	reporter := NewStyledProgressReporter(&out)
+	const calls = 100
+	var workers sync.WaitGroup
+	workers.Add(calls)
+	for range calls {
+		go func() {
+			defer workers.Done()
+			reporter.Report(app.ProgressEvent{Phase: "working", Message: "Update"})
+		}()
+	}
+	workers.Wait()
+	if got := strings.Count(stripANSI(out.String()), "working Update\n"); got != calls {
+		t.Fatalf("reported lines = %d, want %d", got, calls)
+	}
+}
+
 func TestNoopProgressReporter(t *testing.T) {
 	NoopProgressReporter{}.Report(app.ProgressEvent{Phase: "complete", Message: "Done"})
 }
