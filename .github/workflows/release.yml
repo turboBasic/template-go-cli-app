@@ -1,0 +1,29 @@
+name: 🚀 release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions: {}
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          cache: false
+          minimum_release_age: 24h
+
+      - name: Publish the GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: mise exec -- goreleaser release --clean
