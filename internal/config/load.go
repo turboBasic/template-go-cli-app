@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 )
@@ -16,6 +17,7 @@ type LoadResult struct {
 	Config  Config
 	Sources map[string]Source
 	values  map[string]any
+	files   ConfigFiles
 }
 
 // LoadFiles merges defaults, the user file, and the selected project file.
@@ -56,7 +58,7 @@ func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadR
 		}
 		mergeLayer(values, layer, Source(path), sources)
 	}
-	return LoadResult{Sources: sources, values: values}, nil
+	return LoadResult{Sources: sources, values: values, files: files}, nil
 }
 
 func defaultValues() map[string]any {
@@ -83,12 +85,7 @@ func leaves(values map[string]any) []leaf {
 	var result []leaf
 	var walk func(prefix string, group map[string]any)
 	walk = func(prefix string, group map[string]any) {
-		keys := make([]string, 0, len(group))
-		for key := range group {
-			keys = append(keys, key)
-		}
-		slices.Sort(keys)
-		for _, key := range keys {
+		for _, key := range slices.Sorted(maps.Keys(group)) {
 			path := prefix + key
 			if nested, ok := group[key].(map[string]any); ok {
 				walk(path+".", nested)

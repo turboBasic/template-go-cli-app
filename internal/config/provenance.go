@@ -15,6 +15,8 @@ const (
 	KindProjectFile SourceKind = "project file"
 	KindEnvironment SourceKind = "environment variable"
 	KindFlag        SourceKind = "flag"
+	// KindUnknown marks a leaf whose source matches no layer; it signals a loader bug, not a user error.
+	KindUnknown SourceKind = "unknown"
 )
 
 // Entry is one effective configuration leaf and where it came from.
@@ -27,7 +29,7 @@ type Entry struct {
 }
 
 // Entries lists every effective leaf sorted by key. Durations are rendered as their string form.
-func (r LoadResult) Entries(files ConfigFiles) []Entry {
+func (r LoadResult) Entries() []Entry {
 	found := leaves(r.values)
 	entries := make([]Entry, 0, len(found))
 	for _, leaf := range found {
@@ -35,7 +37,7 @@ func (r LoadResult) Entries(files ConfigFiles) []Entry {
 		if duration, ok := value.(time.Duration); ok {
 			value = duration.String()
 		}
-		kind, origin := classify(r.Sources[leaf.key], files)
+		kind, origin := classify(r.Sources[leaf.key], r.files)
 		entries = append(entries, Entry{Key: leaf.key, Value: value, Source: kind, Origin: origin})
 	}
 	return entries
@@ -55,6 +57,6 @@ func classify(source Source, files ConfigFiles) (SourceKind, string) {
 	case strings.HasPrefix(string(source), "CLI_APP_"):
 		return KindEnvironment, string(source)
 	default:
-		return KindProjectFile, string(source)
+		return KindUnknown, string(source)
 	}
 }

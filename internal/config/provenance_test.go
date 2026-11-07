@@ -18,7 +18,7 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 		t.Fatal(err)
 	}
 	entries := map[string]Entry{}
-	for _, entry := range result.Entries(files) {
+	for _, entry := range result.Entries() {
 		entries[entry.Key] = entry
 	}
 
@@ -46,5 +46,13 @@ func TestEntriesFileStartingWithDashesIsStillAFile(t *testing.T) {
 	kind, origin := classify("--odd.toml", ConfigFiles{Project: "--odd.toml"})
 	if kind != KindProjectFile || origin != "--odd.toml" {
 		t.Errorf("classify = (%q, %q), want project file", kind, origin)
+	}
+}
+
+func TestEntriesUnsourcedLeafIsUnknown(t *testing.T) {
+	result := LoadResult{values: map[string]any{"output": "text"}}
+	got := result.Entries()
+	if len(got) != 1 || got[0].Source != KindUnknown {
+		t.Errorf("Entries() = %+v, want one unknown entry", got)
 	}
 }
