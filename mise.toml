@@ -8,6 +8,7 @@ cz = "command cz"
 "aqua:zizmorcore/zizmor" = "1.32.0"
 go = "1.27.3"
 golangci-lint = "2.15.0"
+goreleaser = "2.20.0"
 jactionlint = { version = "v2.5.0", workflow = "release.yaml" }
 just = "1.59.0"
 "npm:cspell-cli" = "10.4.0"
