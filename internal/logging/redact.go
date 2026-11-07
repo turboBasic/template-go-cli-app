@@ -50,8 +50,8 @@ func (h *redactingHandler) WithGroup(name string) slog.Handler {
 
 func redactAttr(attr slog.Attr, groups []string) slog.Attr {
 	attr.Value = attr.Value.Resolve()
-	if sensitiveKey(attr.Key) || anySensitiveGroup(groups) {
-		attr.Value = slog.StringValue("[REDACTED]")
+	if SensitiveKey(attr.Key) || anySensitiveGroup(groups) {
+		attr.Value = slog.StringValue(Redacted)
 		return attr
 	}
 	if attr.Value.Kind() == slog.KindGroup {
@@ -64,7 +64,11 @@ func redactAttr(attr slog.Attr, groups []string) slog.Attr {
 	return attr
 }
 
-func sensitiveKey(key string) bool {
+// Redacted replaces every value whose key is sensitive.
+const Redacted = "[REDACTED]"
+
+// SensitiveKey reports whether a key, ignoring case and the separators "_", "-" and ".", names a secret.
+func SensitiveKey(key string) bool {
 	normalize := func(value string) string {
 		return strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(value))
 	}
@@ -79,7 +83,7 @@ func sensitiveKey(key string) bool {
 
 func anySensitiveGroup(groups []string) bool {
 	for _, group := range groups {
-		if sensitiveKey(group) {
+		if SensitiveKey(group) {
 			return true
 		}
 	}
