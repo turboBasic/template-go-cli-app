@@ -158,7 +158,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		case loaded.Config.Quiet:
 			progressReporter = output.NoopProgressReporter{}
 		case renderer.Options.ProgressColorEnabled():
-			styled := output.NewStyledProgressReporter(cmd.ErrOrStderr())
+			styled := output.NewStyledProgressReporter(cmd.ErrOrStderr(), renderer.Options.Terminals.Stderr)
 			stopProgress = styled.Close
 			progressReporter = styled
 		}

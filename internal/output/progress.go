@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
@@ -55,36 +57,110 @@ func (r *PlainProgressReporter) Report(event app.ProgressEvent) {
 	_, _ = io.WriteString(r.writer, formatProgressEvent(event))
 }
 
-// StyledProgressReporter writes one styled line per progress event: a colored phase label with
-// faint detail, and a check mark in place of the label on completion.
+// StyledProgressReporter shows styled progress: a colored phase label with faint detail and a check
+// mark in place of the label on completion. Animated, it shows a spinner on the current phase until
+// completion or Close; otherwise it writes one line per event.
 type StyledProgressReporter struct {
-	mu     sync.Mutex
-	writer io.Writer
-	styles styles
-	gate   completionGate
+	mu      sync.Mutex
+	writer  io.Writer
+	styles  styles
+	gate    completionGate
+	program *tea.Program // nil when not animating or once stopped
+	done    chan struct{}
+	closed  bool
 }
 
-// NewStyledProgressReporter constructs a styled reporter for the given writer.
-func NewStyledProgressReporter(writer io.Writer) *StyledProgressReporter {
+// NewStyledProgressReporter constructs a styled reporter for the given writer. Animate starts a
+// Bubble Tea program on the writer, which must therefore be a terminal; Close stops it.
+func NewStyledProgressReporter(writer io.Writer, animate bool) *StyledProgressReporter {
 	if writer == nil {
 		writer = io.Discard
 	}
-	return &StyledProgressReporter{writer: writer, styles: newStyles()}
+	r := &StyledProgressReporter{writer: writer, styles: newStyles()}
+	if animate {
+		// The program owns neither input nor signals: main keeps SIGINT and the exit codes.
+		r.program = tea.NewProgram(
+			spinnerModel{spinner: spinner.New(spinner.WithStyle(r.styles.phase)), styles: r.styles},
+			tea.WithInput(nil), tea.WithoutSignalHandler(), tea.WithOutput(writer),
+		)
+		r.done = make(chan struct{})
+		go func() {
+			defer close(r.done)
+			_, _ = r.program.Run()
+		}()
+	}
+	return r
 }
 
-// Report writes one styled progress line, ignoring writer errors.
+// Report shows one progress event, ignoring writer errors. It does nothing after Close.
 func (r *StyledProgressReporter) Report(event app.ProgressEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.gate.skip(event) {
+	if r.closed || r.gate.skip(event) {
 		return
 	}
+	if r.program != nil && !isComplete(event) {
+		r.program.Send(labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event)})
+		return
+	}
+	r.stopProgram()
 	_, _ = io.WriteString(r.writer, r.styledLine(event))
 }
 
-// Close releases the reporter; it is safe to call more than once.
-func (r *StyledProgressReporter) Close() {}
+// Close stops the spinner and restores the terminal; it is safe to call more than once.
+func (r *StyledProgressReporter) Close() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.closed = true
+	r.stopProgram()
+}
+
+func (r *StyledProgressReporter) stopProgram() {
+	if r.program == nil {
+		return
+	}
+	r.program.Send(stopMsg{})
+	<-r.done
+	r.program = nil
+}
+
+type labelMsg struct{ phase, detail string }
+
+type stopMsg struct{}
+
+// spinnerModel draws the spinner line; it leaves nothing on screen once stopped.
+type spinnerModel struct {
+	spinner spinner.Model
+	styles  styles
+	phase   string
+	detail  string
+	stopped bool
+}
+
+func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
+
+func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case labelMsg:
+		m.phase, m.detail = msg.phase, msg.detail
+		return m, nil
+	case stopMsg:
+		m.stopped = true
+		return m, tea.Quit
+	}
+	var cmd tea.Cmd
+	m.spinner, cmd = m.spinner.Update(msg)
+	return m, cmd
+}
+
+func (m spinnerModel) View() tea.View {
+	if m.stopped {
+		return tea.NewView("")
+	}
+	return tea.NewView(m.spinner.View() + " " + m.styles.phase.Render(m.phase) + " " + m.styles.detail.Render(m.detail))
+}
 
 func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
 	detail := event.Message + progressCounter(event)
