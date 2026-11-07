@@ -829,3 +829,49 @@ func newTestRootCommand(t *testing.T) *cobra.Command {
 	reader := memory.NewResourceReader()
 	return NewRootCommand(reader, testBuildInfo(), reader.Names())
 }
+
+type countingResolver struct{ calls int }
+
+func (r *countingResolver) Resolve(context.Context, string) (logging.Secret, error) {
+	r.calls++
+	return "resolved-secret", nil
+}
+
+func TestCredentialResolvesOnlyWhenApplying(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		args      []string
+		wantCalls int
+	}{
+		{name: "help", args: []string{"--help"}},
+		{name: "completion", args: []string{"completion", "bash"}},
+		{name: "config show", args: []string{"config", "show"}},
+		{name: "resource list", args: []string{"resource", "list"}},
+		{name: "resource status", args: []string{"resource", "status", "example-1"}},
+		{name: "resource apply", args: []string{"resource", "apply", "example-1"}, wantCalls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			t.Setenv("CLI_APP_RESOURCE_CREDENTIAL", "op://vault/item/field")
+			resolver := &countingResolver{}
+			reader := memory.NewResourceReader()
+			command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(resolver, effective.Resource.Credential)), nil, nil
+			}, testBuildInfo(), reader.Names())
+			var out bytes.Buffer
+			command.SetOut(&out)
+			command.SetErr(&bytes.Buffer{})
+			command.SetArgs(append([]string{"--quiet"}, test.args...))
+
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if resolver.calls != test.wantCalls {
+				t.Fatalf("resolver calls = %d, want %d", resolver.calls, test.wantCalls)
+			}
+			if test.name == "config show" && (!strings.Contains(out.String(), "op://vault/item/field") || strings.Contains(out.String(), "resolved-secret")) {
+				t.Fatalf("config show output = %q, want the reference and not the resolved value", out.String())
+			}
+		})
+	}
+}
