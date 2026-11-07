@@ -6,12 +6,38 @@
   "semanticCommits": "enabled",
   "semanticCommitType": "chore",
   "semanticCommitScope": "deps",
+  "minimumReleaseAge": "3 days",
+  "platformAutomerge": false,
   "packageRules": [
     {
       "description": "Keep first-party reusable workflows on their moving compatibility refs.",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["turboBasic/**"],
       "enabled": false
+    },
+    {
+      "description": "Dev tools only run in lint and CI, where a breaking release fails the required check.",
+      "matchManagers": ["mise"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "The Go toolchain builds the binary, so it stays manual.",
+      "matchManagers": ["mise"],
+      "matchPackageNames": ["go"],
+      "automerge": false
+    },
+    {
+      "description": "Go modules ship in the binary; the renderer tests pin its output, so only patches merge unattended.",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "Actions run with the repository token; digest pinning plus the release age delay make patches safe to merge unattended.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
     }
   ],
   "lockFileMaintenance": {
