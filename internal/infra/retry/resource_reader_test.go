@@ -149,3 +149,64 @@ func TestResourceReaderDoesNotRetryApply(t *testing.T) {
 		t.Fatalf("Apply() error = %v, attempts = %d, want one un-retried call", err, reader.applyCalls)
 	}
 }
+
+type recordingReporter struct{ events []app.ProgressEvent }
+
+func (r *recordingReporter) Report(event app.ProgressEvent) { r.events = append(r.events, event) }
+
+func TestResourceReaderReportsRetries(t *testing.T) {
+	policy := Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}
+	tests := []struct {
+		name         string
+		failures     int
+		withReporter bool
+		wantErr      bool
+		wantEvents   []app.ProgressEvent
+	}{
+		{
+			name: "two failures then success", failures: 2, withReporter: true,
+			wantEvents: []app.ProgressEvent{
+				{Phase: "retrying", Message: "Attempt 1 of 3 failed, retrying in 1ms"},
+				{Phase: "retrying", Message: "Attempt 2 of 3 failed, retrying in 2ms"},
+			},
+		},
+		{
+			name: "exhaustion reports no third event", failures: 3, withReporter: true, wantErr: true,
+			wantEvents: []app.ProgressEvent{
+				{Phase: "retrying", Message: "Attempt 1 of 3 failed, retrying in 1ms"},
+				{Phase: "retrying", Message: "Attempt 2 of 3 failed, retrying in 2ms"},
+			},
+		},
+		{name: "no reporter reports nothing", failures: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &statusReader{status: func(attempt int) (domain.Resource, error) {
+				if attempt <= test.failures {
+					return domain.Resource{}, app.Classify(app.ErrUnavailable, errors.New("temporary outage"))
+				}
+				return domain.Resource{Name: "example", Status: "ready"}, nil
+			}}
+			reporter := &recordingReporter{}
+			var options []Option
+			if test.withReporter {
+				options = append(options, WithProgress(reporter))
+			}
+			clock := &fakeClock{}
+			wrapped, err := NewResourceReader(reader, policy, clock, nil, options...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = wrapped.Status(context.Background(), "example")
+			if want := []time.Duration{time.Millisecond, 2 * time.Millisecond}; !reflect.DeepEqual(clock.delays, want) {
+				t.Fatalf("slept %v, want %v (the reported delays are the slept ones)", clock.delays, want)
+			}
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Status() error = %v, want error %t", err, test.wantErr)
+			}
+			if !reflect.DeepEqual(reporter.events, test.wantEvents) {
+				t.Fatalf("events = %+v, want %+v", reporter.events, test.wantEvents)
+			}
+		})
+	}
+}

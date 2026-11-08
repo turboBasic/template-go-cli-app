@@ -54,21 +54,34 @@ type Random interface {
 
 // ResourceReader retries only read-only status lookups; List and Apply are never retried.
 type ResourceReader struct {
-	reader app.ResourceReader
-	policy Policy
-	clock  Clock
-	random Random
+	reader   app.ResourceReader
+	policy   Policy
+	clock    Clock
+	random   Random
+	reporter app.ProgressReporter
+}
+
+// Option configures a ResourceReader.
+type Option func(*ResourceReader)
+
+// WithProgress reports each retry to reporter as an indeterminate "retrying" event.
+func WithProgress(reporter app.ProgressReporter) Option {
+	return func(r *ResourceReader) { r.reporter = reporter }
 }
 
 // NewResourceReader wraps a resource reader with status retries under policy.
-func NewResourceReader(reader app.ResourceReader, policy Policy, clock Clock, random Random) (*ResourceReader, error) {
+func NewResourceReader(reader app.ResourceReader, policy Policy, clock Clock, random Random, options ...Option) (*ResourceReader, error) {
 	if reader == nil {
 		return nil, errors.New("resource reader is required")
 	}
 	if clock == nil || policy.Jitter > 0 && random == nil {
 		return nil, errors.New("status retries require a clock and jitter requires a random source")
 	}
-	return &ResourceReader{reader: reader, policy: policy, clock: clock, random: random}, nil
+	r := &ResourceReader{reader: reader, policy: policy, clock: clock, random: random}
+	for _, option := range options {
+		option(r)
+	}
+	return r, nil
 }
 
 // List delegates without retrying the operation.
@@ -94,7 +107,14 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 		if attempt == r.policy.MaxAttempts {
 			return domain.Resource{}, fmt.Errorf("retry exhausted after %d attempts: %w", attempt, lastErr)
 		}
-		if err := r.clock.Sleep(ctx, r.delay(attempt)); err != nil {
+		delay := r.delay(attempt)
+		if r.reporter != nil {
+			r.reporter.Report(app.ProgressEvent{
+				Phase:   "retrying",
+				Message: fmt.Sprintf("Attempt %d of %d failed, retrying in %s", attempt, r.policy.MaxAttempts, delay),
+			})
+		}
+		if err := r.clock.Sleep(ctx, delay); err != nil {
 			return domain.Resource{}, errors.Join(lastErr, fmt.Errorf("wait before retry: %w", err))
 		}
 	}
