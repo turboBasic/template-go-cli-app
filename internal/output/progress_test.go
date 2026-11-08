@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
@@ -110,6 +111,36 @@ func TestStyledProgressReporter(t *testing.T) {
 	}
 }
 
+func TestStyledProgressReporterBar(t *testing.T) {
+	const bar = "█████░░░░░░░░░░░░░░░  25%"
+	var out bytes.Buffer
+	reporter := NewStyledProgressReporter(&out, false)
+	reporter.Report(app.ProgressEvent{Phase: "working", Current: 5, Total: 20, Message: "Working"})
+	reporter.Report(app.ProgressEvent{Phase: "working", Message: "Waiting"})
+	reporter.Report(app.ProgressEvent{Phase: "complete", Current: 20, Total: 20, Message: "Done"})
+	if !strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("output = %q, want ANSI escapes", out.String())
+	}
+	want := bar + " working Working (5/20)\nworking Waiting\n✓ Done (20/20)\n"
+	if got := stripANSI(out.String()); got != want {
+		t.Fatalf("stripped output = %q, want %q", got, want)
+	}
+}
+
+func TestSpinnerModelShowsTheBarOnlyWithATotal(t *testing.T) {
+	model := spinnerModel{spinner: spinner.New(), styles: newStyles()}
+	view := func(msg labelMsg) string {
+		updated, _ := model.Update(msg)
+		return stripANSI(updated.View().Content)
+	}
+	if got, want := view(labelMsg{phase: "working", detail: "Working (10/20)", current: 10, total: 20}), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
+		t.Fatalf("view with a total = %q, want %q", got, want)
+	}
+	if got := view(labelMsg{phase: "working", detail: "Waiting"}); strings.ContainsAny(got, "█░%") {
+		t.Fatalf("view without a total = %q, want the spinner and no bar", got)
+	}
+}
+
 func TestStyledProgressReporterSerializesConcurrentCalls(t *testing.T) {
 	for _, animate := range []bool{false, true} {
 		t.Run(fmt.Sprintf("animate=%t", animate), func(t *testing.T) {
@@ -148,6 +179,23 @@ func TestAnimatedProgressReporterRestoresTheTerminal(t *testing.T) {
 		within(t, reporter.Close)
 		got := out.String()
 		if strings.Count(got, "✓") != 1 || !strings.HasSuffix(stripANSI(got), "✓ Resource applied (1/1)\n") {
+			t.Fatalf("output = %q, want one completion line last", got)
+		}
+		if shown, check := strings.LastIndex(got, showCursor), strings.Index(got, "✓"); shown < 0 || shown > check {
+			t.Fatalf("output = %q, want the cursor restored before the completion line", got)
+		}
+	})
+
+	t.Run("counted progress ends with one completion line after the cursor is restored", func(t *testing.T) {
+		var out bytes.Buffer
+		reporter := NewStyledProgressReporter(&out, true)
+		for step := 1; step <= 3; step++ {
+			reporter.Report(app.ProgressEvent{Phase: "working", Current: step, Total: 4, Message: "Working"})
+		}
+		reporter.Report(app.ProgressEvent{Phase: "complete", Current: 4, Total: 4, Message: "Done"})
+		within(t, reporter.Close)
+		got := out.String()
+		if strings.Count(got, "✓") != 1 || !strings.HasSuffix(stripANSI(got), "✓ Done (4/4)\n") {
 			t.Fatalf("output = %q, want one completion line last", got)
 		}
 		if shown, check := strings.LastIndex(got, showCursor), strings.Index(got, "✓"); shown < 0 || shown > check {

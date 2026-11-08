@@ -3,6 +3,8 @@ package output
 import (
 	"fmt"
 	"io"
+	"math"
+	"strings"
 	"sync"
 
 	"charm.land/bubbles/v2/spinner"
@@ -37,8 +39,9 @@ func (r *PlainProgressReporter) Report(event app.ProgressEvent) {
 }
 
 // StyledProgressReporter shows styled progress: a colored phase label with faint detail and a check
-// mark in place of the label on completion. Animated, it shows a spinner on the current phase from
-// the first progress event until completion or Close; otherwise it writes one line per event.
+// mark in place of the label on completion. An event with a positive Total also shows a filled bar
+// and percentage. Animated, it shows a spinner (or the bar) on the current phase from the first
+// progress event until completion or Close; otherwise it writes one line per event.
 type StyledProgressReporter struct {
 	mu      sync.Mutex
 	writer  io.Writer
@@ -85,7 +88,7 @@ func (r *StyledProgressReporter) Report(event app.ProgressEvent) {
 		if r.program == nil {
 			r.startProgram()
 		}
-		r.program.Send(labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event)})
+		r.program.Send(labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event), current: event.Current, total: event.Total})
 		return
 	}
 	r.stopProgram()
@@ -111,17 +114,22 @@ func (r *StyledProgressReporter) stopProgram() {
 	r.program = nil
 }
 
-type labelMsg struct{ phase, detail string }
+type labelMsg struct {
+	phase, detail  string
+	current, total int
+}
 
 type stopMsg struct{}
 
-// spinnerModel draws the spinner line; it leaves nothing on screen once stopped.
+// spinnerModel draws the spinner line, or the bar while the current event has a total; it leaves
+// nothing on screen once stopped.
 type spinnerModel struct {
-	spinner spinner.Model
-	styles  styles
-	phase   string
-	detail  string
-	stopped bool
+	spinner        spinner.Model
+	styles         styles
+	phase          string
+	detail         string
+	current, total int
+	stopped        bool
 }
 
 func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
@@ -129,7 +137,7 @@ func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case labelMsg:
-		m.phase, m.detail = msg.phase, msg.detail
+		m.phase, m.detail, m.current, m.total = msg.phase, msg.detail, msg.current, msg.total
 		return m, nil
 	case stopMsg:
 		m.stopped = true
@@ -144,7 +152,11 @@ func (m spinnerModel) View() tea.View {
 	if m.stopped {
 		return tea.NewView("")
 	}
-	return tea.NewView(m.spinner.View() + " " + m.styles.phase.Render(m.phase) + " " + m.styles.detail.Render(m.detail))
+	lead := m.spinner.View()
+	if m.total > 0 {
+		lead = m.styles.bar(m.current, m.total)
+	}
+	return tea.NewView(lead + " " + m.styles.phase.Render(m.phase) + " " + m.styles.detail.Render(m.detail))
 }
 
 func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
@@ -152,7 +164,21 @@ func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
 	if isComplete(event) {
 		return r.styles.ready.Render("✓") + " " + detail + "\n"
 	}
-	return r.styles.phase.Render(event.Phase) + " " + r.styles.detail.Render(detail) + "\n"
+	line := r.styles.phase.Render(event.Phase) + " " + r.styles.detail.Render(detail) + "\n"
+	if event.Total > 0 {
+		return r.styles.bar(event.Current, event.Total) + " " + line
+	}
+	return line
+}
+
+const barCells = 20
+
+// bar draws a filled-and-empty bar of barCells cells and the percentage. Basic ANSI styles and fixed
+// fill characters keep `--color always` bytes independent of the terminal, as the other styles do.
+func (s styles) bar(current, total int) string {
+	fraction := math.Max(0, math.Min(1, float64(current)/float64(total)))
+	filled := int(math.Round(fraction * barCells))
+	return s.phase.Render(strings.Repeat("█", filled)) + s.detail.Render(strings.Repeat("░", barCells-filled)) + fmt.Sprintf(" %3.0f%%", fraction*100)
 }
 
 func progressCounter(event app.ProgressEvent) string {
