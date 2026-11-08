@@ -73,7 +73,7 @@ func SensitiveKey(key string) bool {
 		return strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(value))
 	}
 	key = normalize(key)
-	for _, term := range []string{"password", "token", "authorization", "api_key"} {
+	for _, term := range []string{"password", "token", "authorization", "api_key", "access_key", "client_secret", "secret_access_key", "secret_key", "private_key"} {
 		if strings.Contains(key, normalize(term)) {
 			return true
 		}

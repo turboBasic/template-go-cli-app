@@ -32,6 +32,9 @@ func TestRedactSensitiveAndNestedAttributes(t *testing.T) {
 	logger := slog.New(redact(slog.NewJSONHandler(&output, nil)))
 	group := slog.Group("credentials",
 		slog.String("api_key", "key-secret"),
+		slog.String("AWS_ACCESS_KEY_ID", "access-key-secret"),
+		slog.String("client_secret", "client-secret"),
+		slog.String("private_key", "private-key"),
 		slog.Group("database", slog.String("PASSWORD", "password-secret")),
 	)
 	logger.Info("connect",
@@ -41,7 +44,7 @@ func TestRedactSensitiveAndNestedAttributes(t *testing.T) {
 		slog.String("authorization", "auth-secret"),
 	)
 	got := output.String()
-	for _, secret := range []string{"token-secret", "key-secret", "password-secret", "auth-secret"} {
+	for _, secret := range []string{"token-secret", "key-secret", "access-key-secret", "client-secret", "private-key", "password-secret", "auth-secret"} {
 		if strings.Contains(got, secret) {
 			t.Errorf("log output leaks %q: %s", secret, got)
 		}

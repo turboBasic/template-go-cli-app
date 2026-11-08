@@ -20,20 +20,6 @@ type LoadResult struct {
 	files   ConfigFiles
 }
 
-// LoadFiles merges defaults, the user file, and the selected project file.
-func LoadFiles(files ConfigFiles) (LoadResult, error) {
-	result, err := mergeFiles(files)
-	if err != nil {
-		return LoadResult{}, err
-	}
-	config, err := decodeConfig(result.values)
-	if err != nil {
-		return LoadResult{}, fmt.Errorf("decode merged configuration: %w", err)
-	}
-	result.Config = config
-	return result, nil
-}
-
 func mergeFiles(files ConfigFiles) (LoadResult, error) {
 	values := defaultValues()
 	sources := make(map[string]Source)
