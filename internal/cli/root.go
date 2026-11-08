@@ -394,7 +394,7 @@ func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, get
 		Long: fmt.Sprintf("Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
 			"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
 			"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+
-			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay} or the matching\n"+
+			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay,jitter} or the matching\n"+
 			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables. --max-attempts overrides max_attempts for one run, and %d or\n"+
 			"fewer shows the failure. --timeout bounds the retries.",
 			app.FlakyFailures, defaultPolicy.MaxAttempts, defaultPolicy.InitialDelay, defaultPolicy.MaxDelay, app.FlakyFailures),

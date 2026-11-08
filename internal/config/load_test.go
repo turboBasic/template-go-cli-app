@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -106,5 +107,27 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 		if got.Sources[leaf.key] == "" {
 			t.Errorf("leaf %q has no source", leaf.key)
 		}
+	}
+}
+
+// Every supported setting must be listed and settable through the environment; add the missing
+// default, or the environmentKey case, when this fails.
+func TestSchemaKeysAreListedAndHaveEnvironmentVariables(t *testing.T) {
+	listed := map[string]bool{}
+	for _, leaf := range leaves(defaultValues()) {
+		listed[leaf.key] = true
+	}
+	for key := range productionSchema() {
+		if !listed[key] {
+			t.Errorf("schema key %q has no entry in defaultValues", key)
+		}
+		name := "CLI_APP_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+		if got := environmentKey(name); got != key {
+			t.Errorf("environmentKey(%q) = %q, want %q", name, got, key)
+		}
+		delete(listed, key)
+	}
+	for key := range listed {
+		t.Errorf("defaultValues key %q is not in the schema", key)
 	}
 }
