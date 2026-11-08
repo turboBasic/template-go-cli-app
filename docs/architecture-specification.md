@@ -60,6 +60,7 @@ internal/logging/{setup,redact,fanout}.go               # slog setup, redaction 
 internal/output/{renderer,terminal,progress}.go         # result rendering, terminal capabilities and progress
 internal/infra/{memory,retry,onepassword}/              # external-facing adapters, simulated fixture and 1Password adapter
 test/fixtures/
+.cli-app.example.toml                                   # commented reference of every configuration key
 docs/architecture-specification.md
 docs/decisions/
 scripts/init.sh
@@ -91,6 +92,8 @@ Configuration locations and discovery:
 - Only explicitly changed flags override lower layers.
 - Maps merge recursively; arrays are replaced.
 - File-path-typed values from TOML resolve relative to the file that declares them. Values from flags or environment resolve relative to the working directory.
+
+`.cli-app.example.toml` in the repository root documents every key, commented out at its default. Configuration changes update it in the same change; a test fails when it drifts from the schema.
 
 The loader retains the source metadata needed for path resolution. `config show [key]` is the single inspection command: it reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
 

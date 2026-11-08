@@ -1,0 +1,81 @@
+# cli-app configuration reference.
+#
+# Every supported key is listed with its default and what it does. To use it, copy this file to
+# `.cli-app.toml` in the directory you run cli-app from (or to `$XDG_CONFIG_HOME/cli-app/config.toml`,
+# default `~/.config/cli-app/config.toml`, for all projects), then remove the `#` in front of each
+# setting you want to change. Lines that start with `# ` are explanations; lines that start with `#`
+# directly followed by a key are settings; the `[table]` headers stay on.
+#
+# Unknown keys and values of the wrong type are errors, so a typo is reported, not ignored.
+# Later layers win: flags, then environment variables, then `--config` or `.cli-app.toml`, then the
+# user file, then the built-in defaults. Run `cli-app config show` to see the effective values and
+# which layer each one came from.
+#
+# Durations are strings such as "500ms", "5s" or "2m". Every key has an environment variable named
+# CLI_APP_ plus the key in upper case with dots as underscores, e.g. CLI_APP_LOG_LEVEL.
+
+# Result format on stdout: "text" (human readable) or "json" (machine readable).
+# Flag: --output. Default: "text".
+#output = "text"
+
+# Color for results and progress: "auto" colors a terminal unless NO_COLOR is set, "always" colors
+# regardless of NO_COLOR, "never" never colors. JSON results are never colored.
+# Flag: --color. Default: "auto".
+#color = "auto"
+
+# Suppress non-essential output such as progress. Results and errors still print.
+# Flag: --quiet. Default: false.
+#quiet = false
+
+[log]
+# Minimum level of the human-readable log on stderr: "debug", "info", "warn" or "error".
+# Flag: --log-level. Default: "warn".
+#level = "warn"
+
+[log.file]
+# Write a JSON Lines log to this file. There is no log file unless you set a path. A relative path
+# is resolved against the directory of the file that sets it. The file is created with restrictive
+# permissions and is never rotated; use an external tool such as logrotate. Unset by default; the
+# value below is an example.
+#path = "logs/cli-app.jsonl"
+
+# Minimum level written to the log file, independent of the stderr level above: "debug", "info",
+# "warn" or "error". Default: "debug".
+#level = "debug"
+
+[timeouts]
+# Upper bound for releasing dependencies and closing the logger after a command finishes or is
+# cancelled. Must be positive. Default: "5s".
+#cleanup = "5s"
+
+[timeouts.demo]
+# Upper bound for one run of each demo command that has no timeout of its own. Must be positive.
+# The flag --timeout overrides it for one run. All three are unset by default, meaning no limit;
+# the values below are examples.
+#structured_output = "30s"
+#not_found = "30s"
+#secret_credential = "30s"
+
+[retry.demo.flaky_dependency]
+# Retry policy of `cli-app demo flaky-dependency`. The dependency fails twice before it succeeds.
+# Total number of attempts including the first; 1 turns retries off. Must be at least 1.
+# Flag: --max-attempts (on that command). Default: 3.
+#max_attempts = 3
+
+# Wait before the first retry; each later wait doubles up to max_delay. With more than one attempt
+# it must be positive. Default: "3s".
+#initial_delay = "3s"
+
+# Longest wait between two attempts. With more than one attempt it must be at least initial_delay.
+# Default: "10s".
+#max_delay = "10s"
+
+# Random variation of each wait as a fraction between 0 (none) and 1 (up to 100%). Default: 0.
+#jitter = 0.0
+
+[demo.secret_credential]
+# Secret reference that `cli-app demo secret-credential` resolves when it runs, in the form
+# scheme://reference, for example a 1Password item such as op://vault/item/field. Put the
+# reference here, never the secret itself; the secret is not printed, logged or shown by
+# `config show`. Empty by default, which leaves the demo without a credential.
+#reference = "op://vault/item/field"
