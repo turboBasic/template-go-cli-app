@@ -23,6 +23,7 @@ main() {
   copy_tracked_tree "$repo_root"
   run_init
   check_release_config
+  check_example_config
   check_build
   echo "init check OK"
 }
@@ -57,6 +58,13 @@ check_release_config() {
   git remote add origin "https://github.com/example/$CONFIG_ID.git"
   output="$(goreleaser check .goreleaser.yaml 2>&1)" ||
     fail "goreleaser check rejects the initialized .goreleaser.yaml:"$'\n'"$output"
+}
+
+check_example_config() {
+  local file=".$CONFIG_ID.example.toml"
+  [[ -f "$SCRATCH/$file" && ! -e "$SCRATCH/.cli-app.example.toml" ]] || fail "$file was not renamed from .cli-app.example.toml"
+  ! grep -Eq 'cli-app|CLI_APP_' "$SCRATCH/$file" || fail "$file still names cli-app"
+  grep -Fq 'DEMO_APP_LOG_LEVEL' "$SCRATCH/$file" || fail "$file lacks the DEMO_APP_ environment prefix"
 }
 
 check_build() {
