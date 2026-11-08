@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/logging"
@@ -89,6 +90,7 @@ type ResourceService struct {
 	progressReporter ProgressReporter
 	resolver         SecretResolver
 	credentialRef    string
+	longRunning      time.Duration
 }
 
 // ResourceOption configures optional behaviour of a ResourceService.
@@ -101,7 +103,7 @@ func WithCredential(resolver SecretResolver, reference string) ResourceOption {
 
 // NewResourceService constructs a resource service with its required dependencies.
 func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter, options ...ResourceOption) *ResourceService {
-	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter}
+	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter, longRunning: longRunningDuration}
 	for _, option := range options {
 		option(s)
 	}
