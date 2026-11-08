@@ -9,7 +9,6 @@ import (
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 type fakeClock struct {
@@ -36,20 +35,11 @@ func (r *fakeRandom) Float64() float64 {
 type statusReader struct {
 	statusCalls int
 	status      func(int) (domain.Resource, error)
-	applyCalls  int
-	applyErr    error
 }
-
-func (r *statusReader) List(context.Context) ([]domain.Resource, error) { return nil, nil }
 
 func (r *statusReader) Status(context.Context, string) (domain.Resource, error) {
 	r.statusCalls++
 	return r.status(r.statusCalls)
-}
-
-func (r *statusReader) Apply(context.Context, string, logging.Secret) (domain.Resource, error) {
-	r.applyCalls++
-	return domain.Resource{}, r.applyErr
 }
 
 func unavailable(cause error) *statusReader {
@@ -58,7 +48,7 @@ func unavailable(cause error) *statusReader {
 	}}
 }
 
-func TestResourceReaderRetriesStatusSuccessAfterTransientFailure(t *testing.T) {
+func TestStatusReaderRetriesStatusSuccessAfterTransientFailure(t *testing.T) {
 	want := domain.Resource{Name: "example", Status: "ready"}
 	reader := &statusReader{status: func(attempt int) (domain.Resource, error) {
 		if attempt == 1 {
@@ -67,7 +57,7 @@ func TestResourceReaderRetriesStatusSuccessAfterTransientFailure(t *testing.T) {
 		return want, nil
 	}}
 	clock := &fakeClock{}
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}, clock, nil)
+	wrapped, err := NewStatusReader(reader, Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}, clock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,10 +67,10 @@ func TestResourceReaderRetriesStatusSuccessAfterTransientFailure(t *testing.T) {
 	}
 }
 
-func TestResourceReaderStatusRetryExhaustion(t *testing.T) {
+func TestStatusReaderStatusRetryExhaustion(t *testing.T) {
 	wantCause := errors.New("temporary outage")
 	reader := unavailable(wantCause)
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}, &fakeClock{}, nil)
+	wrapped, err := NewStatusReader(reader, Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}, &fakeClock{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,11 +80,11 @@ func TestResourceReaderStatusRetryExhaustion(t *testing.T) {
 	}
 }
 
-func TestResourceReaderStatusBackoffIsBoundedAndJittered(t *testing.T) {
+func TestStatusReaderStatusBackoffIsBoundedAndJittered(t *testing.T) {
 	reader := unavailable(errors.New("temporary outage"))
 	clock := &fakeClock{}
 	random := &fakeRandom{values: []float64{0, 0.5, 1}}
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 4, InitialDelay: 100 * time.Millisecond, MaxDelay: 250 * time.Millisecond, Jitter: 0.5}, clock, random)
+	wrapped, err := NewStatusReader(reader, Policy{MaxAttempts: 4, InitialDelay: 100 * time.Millisecond, MaxDelay: 250 * time.Millisecond, Jitter: 0.5}, clock, random)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +96,9 @@ func TestResourceReaderStatusBackoffIsBoundedAndJittered(t *testing.T) {
 	}
 }
 
-func TestResourceReaderStatusDoesNotRetryPermanentFailure(t *testing.T) {
+func TestStatusReaderStatusDoesNotRetryPermanentFailure(t *testing.T) {
 	reader := &statusReader{status: func(int) (domain.Resource, error) { return domain.Resource{}, domain.ErrResourceNotFound }}
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 5, InitialDelay: time.Millisecond, MaxDelay: time.Second}, &fakeClock{}, nil)
+	wrapped, err := NewStatusReader(reader, Policy{MaxAttempts: 5, InitialDelay: time.Millisecond, MaxDelay: time.Second}, &fakeClock{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,14 +107,14 @@ func TestResourceReaderStatusDoesNotRetryPermanentFailure(t *testing.T) {
 	}
 }
 
-func TestResourceReaderStatusStopsPromptlyWhenCanceledDuringWait(t *testing.T) {
+func TestStatusReaderStatusStopsPromptlyWhenCanceledDuringWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	clock := &fakeClock{sleep: func(ctx context.Context) error {
 		cancel()
 		return ctx.Err()
 	}}
 	reader := unavailable(errors.New("temporary outage"))
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 4, InitialDelay: time.Second, MaxDelay: time.Second}, clock, nil)
+	wrapped, err := NewStatusReader(reader, Policy{MaxAttempts: 4, InitialDelay: time.Second, MaxDelay: time.Second}, clock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,27 +124,11 @@ func TestResourceReaderStatusStopsPromptlyWhenCanceledDuringWait(t *testing.T) {
 	}
 }
 
-func TestResourceReaderDoesNotRetryApply(t *testing.T) {
-	wantErr := app.Classify(app.ErrUnavailable, errors.New("temporary outage"))
-	reader := &statusReader{
-		status:   func(int) (domain.Resource, error) { return domain.Resource{}, nil },
-		applyErr: wantErr,
-	}
-	wrapped, err := NewResourceReader(reader, Policy{MaxAttempts: 4, InitialDelay: time.Millisecond, MaxDelay: time.Second}, &fakeClock{}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = wrapped.Apply(context.Background(), "example", "")
-	if !errors.Is(err, wantErr) || reader.applyCalls != 1 {
-		t.Fatalf("Apply() error = %v, attempts = %d, want one un-retried call", err, reader.applyCalls)
-	}
-}
-
 type recordingReporter struct{ events []app.ProgressEvent }
 
 func (r *recordingReporter) Report(event app.ProgressEvent) { r.events = append(r.events, event) }
 
-func TestResourceReaderReportsRetries(t *testing.T) {
+func TestStatusReaderReportsRetries(t *testing.T) {
 	policy := Policy{MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Second}
 	tests := []struct {
 		name         string
@@ -193,7 +167,7 @@ func TestResourceReaderReportsRetries(t *testing.T) {
 				options = append(options, WithProgress(reporter))
 			}
 			clock := &fakeClock{}
-			wrapped, err := NewResourceReader(reader, policy, clock, nil, options...)
+			wrapped, err := NewStatusReader(reader, policy, clock, nil, options...)
 			if err != nil {
 				t.Fatal(err)
 			}

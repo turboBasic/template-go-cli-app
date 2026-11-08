@@ -1048,7 +1048,7 @@ func TestFlakyDependencyCommand(t *testing.T) {
 		args    []string
 		wantErr error
 	}{
-		{name: "the first failure is final without a retry wrapper", args: []string{"demo", "flaky-dependency"}, wantErr: app.ErrUnavailable},
+		{name: "the first failure is final without a retry policy", args: []string{"demo", "flaky-dependency"}, wantErr: app.ErrUnavailable},
 		{name: "a non-positive timeout is a validation error", args: []string{"demo", "flaky-dependency", "--timeout", "0s"}, wantErr: app.ErrValidation},
 		{name: "the timeout bounds the demo", args: []string{"demo", "flaky-dependency", "--timeout", "1ns"}, wantErr: app.ErrTimeout},
 	}
@@ -1057,7 +1057,7 @@ func TestFlakyDependencyCommand(t *testing.T) {
 			setupConfigEnvironment(t)
 			reader := memory.NewResourceReader()
 			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-				return app.NewResourceService(reader, logger, progressReporter), nil, nil
+				return app.NewResourceService(reader, logger, progressReporter, app.WithFlakyDependency(memory.NewFlakyReader(app.FlakyFailures))), nil, nil
 			}, testBuildInfo(), reader.Names())
 			command.SetArgs(test.args)
 			command.SetOut(io.Discard)
