@@ -142,3 +142,10 @@ func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
 		t.Fatalf("load() error = %v, want a demo.secret_credential.reference validation error", err)
 	}
 }
+
+func TestLoadRejectsFlagWithoutKey(t *testing.T) {
+	_, err := load(ConfigFiles{}, nil, map[string]FlagValue{"no-such-flag": {Value: "debug", Source: "--no-such-flag"}})
+	if err == nil || !strings.Contains(err.Error(), "--no-such-flag") {
+		t.Fatalf("load() error = %v, want an error naming --no-such-flag", err)
+	}
+}

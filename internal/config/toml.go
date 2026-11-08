@@ -86,14 +86,10 @@ func knownTable(schema map[string]valueType, path string) bool {
 }
 
 func decodeConfig(values map[string]any) (Config, error) {
-	for _, key := range []string{
-		"timeouts.cleanup",
-		"timeouts.demo.structured_output",
-		"timeouts.demo.not_found",
-		"timeouts.demo.secret_credential",
-		"retry.demo.flaky_dependency.initial_delay",
-		"retry.demo.flaky_dependency.max_delay",
-	} {
+	for key, kind := range productionSchema() {
+		if kind != durationValue {
+			continue
+		}
 		if err := decodeDuration(values, key); err != nil {
 			return Config{}, err
 		}

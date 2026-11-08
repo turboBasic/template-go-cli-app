@@ -38,7 +38,7 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		if !ok || !strings.HasPrefix(name, "CLI_APP_") {
 			continue
 		}
-		key := environmentKey(name)
+		key := environmentKey(name, schema)
 		parsed, known, err := parseOverlayValue(key, value, schema)
 		if !known {
 			continue
@@ -49,14 +49,14 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		mergeLayer(result.values, nestedValue(key, parsed), Source(name), result.Sources)
 	}
 	for key, flag := range flags {
+		target := strings.ReplaceAll(key, "-", ".")
+		if _, known := schema[target]; !known {
+			return LoadResult{}, fmt.Errorf("flag %s has no configuration key %q", flagSource(key, flag), target)
+		}
 		if !flag.Changed {
 			continue
 		}
-		target := strings.ReplaceAll(key, "-", ".")
-		parsed, known, err := parseFlagValue(target, flag.Value, schema)
-		if !known {
-			continue
-		}
+		parsed, _, err := parseFlagValue(target, flag.Value, schema)
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read flag %s: %w", flagSource(key, flag), err)
 		}
@@ -72,35 +72,13 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 	return result, nil
 }
 
-func environmentKey(name string) string {
-	switch name {
-	case "CLI_APP_LOG_LEVEL":
-		return "log.level"
-	case "CLI_APP_LOG_FILE_LEVEL":
-		return "log.file.level"
-	case "CLI_APP_LOG_FILE_PATH":
-		return "log.file.path"
-	case "CLI_APP_TIMEOUTS_CLEANUP":
-		return "timeouts.cleanup"
-	case "CLI_APP_TIMEOUTS_DEMO_STRUCTURED_OUTPUT":
-		return "timeouts.demo.structured_output"
-	case "CLI_APP_TIMEOUTS_DEMO_NOT_FOUND":
-		return "timeouts.demo.not_found"
-	case "CLI_APP_TIMEOUTS_DEMO_SECRET_CREDENTIAL":
-		return "timeouts.demo.secret_credential"
-	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_ATTEMPTS":
-		return "retry.demo.flaky_dependency.max_attempts"
-	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_INITIAL_DELAY":
-		return "retry.demo.flaky_dependency.initial_delay"
-	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_DELAY":
-		return "retry.demo.flaky_dependency.max_delay"
-	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER":
-		return "retry.demo.flaky_dependency.jitter"
-	case "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE":
-		return "demo.secret_credential.reference"
-	default:
-		return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
+func environmentKey(name string, schema map[string]valueType) string {
+	for key := range schema {
+		if name == "CLI_APP_"+strings.ToUpper(strings.ReplaceAll(key, ".", "_")) {
+			return key
+		}
 	}
+	return ""
 }
 
 func nestedValue(key string, value any) map[string]any {
