@@ -132,9 +132,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
-		if cmd.Parent() != nil && cmd.Parent().Name() == "resource" && flags.Lookup("timeout").Changed {
-			key := "timeouts.demo." + transitionalDemoName(cmd.Name())
-			flagValues[key] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
+		if name := demoTimeoutName(cmd); name != "" && flags.Lookup("timeout").Changed {
+			// A demo without a schema key, long-running, is skipped here and applies --timeout itself.
+			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
@@ -168,7 +168,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			stopProgress = styled.Close
 			progressReporter = styled
 		}
-		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Demo); timeout != nil {
+		if timeout := demoOperationTimeout(cmd, loaded.Config.Timeouts.Demo); timeout != nil {
 			parentContext := cmd.Context()
 			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
 			cmd.SetContext(operationContext)
@@ -192,22 +192,13 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
 		return cleanup(cmd.Context())
 	}
-	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
-	rejectUnknownSubcommands(resource)
 	getResources := func() *app.ResourceService { return resources }
 	getRenderer := func() output.Renderer { return renderer }
-	list := newResourceListCommand(getResources, getRenderer)
-	status := newResourceStatusCommand(getResources, getRenderer, names)
-	apply := newResourceApplyCommand(getResources, getRenderer, names)
-	closeAfterRun(list, cleanup)
-	closeAfterRun(status, cleanup)
-	closeAfterRun(apply, cleanup)
-	resource.AddCommand(list, status, apply)
-	demo := newDemoCommand(getResources)
+	demo := newDemoCommand(getResources, getRenderer, names)
 	for _, command := range demo.Commands() {
 		closeAfterRun(command, cleanup)
 	}
-	root.AddCommand(resource, demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
+	root.AddCommand(demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})
@@ -232,25 +223,16 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 }
 
-// transitionalDemoName maps a resource command to the demo that replaces it; task 1.2 deletes it.
-func transitionalDemoName(command string) string {
-	switch command {
-	case "list":
-		return "structured_output"
-	case "status":
-		return "not_found"
-	case "apply":
-		return "secret_credential"
-	default:
-		return command
+// demoTimeoutName is the last element of a demo command's timeouts.demo.<name> key, or "" outside the group.
+func demoTimeoutName(cmd *cobra.Command) string {
+	if cmd.Parent() == nil || cmd.Parent().Name() != "demo" {
+		return ""
 	}
+	return strings.ReplaceAll(cmd.Name(), "-", "_")
 }
 
-func resourceOperationTimeout(cmd *cobra.Command, timeouts config.DemoTimeouts) *time.Duration {
-	if cmd.Parent() == nil || cmd.Parent().Name() != "resource" {
-		return nil
-	}
-	switch transitionalDemoName(cmd.Name()) {
+func demoOperationTimeout(cmd *cobra.Command, timeouts config.DemoTimeouts) *time.Duration {
+	switch demoTimeoutName(cmd) {
 	case "structured_output":
 		return timeouts.StructuredOutput
 	case "not_found":
@@ -299,9 +281,9 @@ func isHelpOrCompletion(cmd *cobra.Command) bool {
 	return false
 }
 
-func newResourceListCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
+func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
+		Use:   "structured-output",
 		Short: "List resources",
 		Args:  validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -314,9 +296,9 @@ func newResourceListCommand(getResources func() *app.ResourceService, getRendere
 	}
 }
 
-func newResourceStatusCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
+func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "status <name>",
+		Use:               "not-found <name>",
 		Short:             "Show a resource status",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
@@ -330,9 +312,9 @@ func newResourceStatusCommand(getResources func() *app.ResourceService, getRende
 	}
 }
 
-func newResourceApplyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
+func newDemoSecretCredentialCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "apply <name>",
+		Use:               "secret-credential <name>",
 		Short:             "Apply a resource",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
@@ -348,7 +330,7 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, getRender
 
 // newDemoCommand groups the template's demonstrations of its contracts. An application built from the
 // template deletes the group, and every demo with it.
-func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
+func newDemoCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	demo := &cobra.Command{
 		Use:   "demo",
 		Short: "Demonstrations of the template's contracts; delete this group in your application",
@@ -356,6 +338,7 @@ func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
 			"They are not part of an application built from the template: delete this group, and the code it calls.",
 	}
 	rejectUnknownSubcommands(demo)
+	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names))
 	demo.AddCommand(&cobra.Command{
 		Use:   "long-running",
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",

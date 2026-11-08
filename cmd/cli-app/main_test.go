@@ -64,7 +64,7 @@ func TestExecuteReportsOutputFailureToStderrAndReturnsFailureCode(t *testing.T) 
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, cli.BuildInfo{}, reader.Names())
-	command.SetArgs([]string{"--config", configPath, "--output", "json", "resource", "list"})
+	command.SetArgs([]string{"--config", configPath, "--output", "json", "demo", "structured-output"})
 	command.SetOut(failingWriter{err: errors.New("injected output failure")})
 	var stderr bytes.Buffer
 	command.SetErr(&stderr)
@@ -119,7 +119,7 @@ func TestSignalHelperProcess(t *testing.T) {
 			return nil
 		}, nil
 	}, cli.BuildInfo{}, resources.Names())
-	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	command.SetErr(os.Stderr)
 	code := executeWithSignals(func(ctx context.Context) error {
 		_, _ = fmt.Fprintln(os.Stdout, "ready")

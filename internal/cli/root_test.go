@@ -27,7 +27,7 @@ import (
 
 func TestResourceListCommand(t *testing.T) {
 	command := newTestRootCommand(t)
-	command.SetArgs([]string{"resource", "list"})
+	command.SetArgs([]string{"demo", "structured-output"})
 	var output bytes.Buffer
 	command.SetOut(&output)
 
@@ -42,7 +42,7 @@ func TestResourceListCommand(t *testing.T) {
 }
 
 func TestRootFeatures(t *testing.T) {
-	for _, args := range [][]string{{"--help"}, {"help", "resource", "status"}, {"--version"}, {"completion", "bash"}, {"completion", "zsh"}, {"completion", "fish"}, {"completion", "powershell"}} {
+	for _, args := range [][]string{{"--help"}, {"help", "demo", "not-found"}, {"--version"}, {"completion", "bash"}, {"completion", "zsh"}, {"completion", "fish"}, {"completion", "powershell"}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			command := newTestRootCommand(t)
 			command.SetArgs(args)
@@ -66,12 +66,12 @@ func TestResourceStatusAndApplyCommands(t *testing.T) {
 		args string
 		want string
 	}{
-		{args: "status example-2", want: "example-2: pending\n"},
-		{args: "apply example-2", want: "example-2: ready\n"},
+		{args: "not-found example-2", want: "example-2: pending\n"},
+		{args: "secret-credential example-2", want: "example-2: ready\n"},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			command := newTestRootCommand(t)
-			command.SetArgs(strings.Fields("resource " + tc.args))
+			command.SetArgs(strings.Fields("demo " + tc.args))
 			command.SetIn(bytes.NewBuffer(nil))
 			var output bytes.Buffer
 			command.SetOut(&output)
@@ -91,9 +91,9 @@ func TestResourceCommandsJSONOutput(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "list", args: []string{"resource", "list"}, want: "[{\"name\":\"example-1\",\"status\":\"ready\"},{\"name\":\"example-2\",\"status\":\"pending\"}]\n"},
-		{name: "status", args: []string{"resource", "status", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"pending\"}\n"},
-		{name: "apply", args: []string{"resource", "apply", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"ready\"}\n"},
+		{name: "list", args: []string{"demo", "structured-output"}, want: "[{\"name\":\"example-1\",\"status\":\"ready\"},{\"name\":\"example-2\",\"status\":\"pending\"}]\n"},
+		{name: "status", args: []string{"demo", "not-found", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"pending\"}\n"},
+		{name: "apply", args: []string{"demo", "secret-credential", "example-2"}, want: "{\"name\":\"example-2\",\"status\":\"ready\"}\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -128,9 +128,9 @@ func TestResourceResultColor(t *testing.T) {
 		return output.String()
 	}
 	for _, command := range [][]string{
-		{"resource", "list"},
-		{"resource", "status", "example-2"},
-		{"resource", "apply", "example-2"},
+		{"demo", "structured-output"},
+		{"demo", "not-found", "example-2"},
+		{"demo", "secret-credential", "example-2"},
 	} {
 		t.Run(strings.Join(command[1:], " "), func(t *testing.T) {
 			redirected := run(t, nil, command)
@@ -173,16 +173,16 @@ func TestPersistentFlagsAndValidation(t *testing.T) {
 		want string
 		bad  bool
 	}{
-		{name: "global flags", args: []string{"--log-level", "debug", "--output", "json", "--color", "never", "--quiet", "resource", "list"}, want: "example-1"},
-		{name: "flags after resource", args: []string{"resource", "--output", "text", "list"}, want: "example-1"},
-		{name: "invalid output", args: []string{"--output", "yaml", "resource", "list"}, bad: true},
-		{name: "invalid log level", args: []string{"--log-level", "trace", "resource", "list"}, bad: true},
-		{name: "invalid color", args: []string{"--color", "sometimes", "resource", "list"}, bad: true},
-		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "resource", "list"}, want: "example-1"},
-		{name: "missing name", args: []string{"resource", "status"}, bad: true},
-		{name: "extra name", args: []string{"resource", "status", "example-1", "example-2"}, bad: true},
-		{name: "unknown name", args: []string{"resource", "status", "missing"}, bad: true},
-		{name: "extra list argument", args: []string{"resource", "list", "example-1"}, bad: true},
+		{name: "global flags", args: []string{"--log-level", "debug", "--output", "json", "--color", "never", "--quiet", "demo", "structured-output"}, want: "example-1"},
+		{name: "flags after demo", args: []string{"demo", "--output", "text", "structured-output"}, want: "example-1"},
+		{name: "invalid output", args: []string{"--output", "yaml", "demo", "structured-output"}, bad: true},
+		{name: "invalid log level", args: []string{"--log-level", "trace", "demo", "structured-output"}, bad: true},
+		{name: "invalid color", args: []string{"--color", "sometimes", "demo", "structured-output"}, bad: true},
+		{name: "json with forced color", args: []string{"--output", "json", "--color", "always", "demo", "structured-output"}, want: "example-1"},
+		{name: "missing name", args: []string{"demo", "not-found"}, bad: true},
+		{name: "extra name", args: []string{"demo", "not-found", "example-1", "example-2"}, bad: true},
+		{name: "unknown name", args: []string{"demo", "not-found", "missing"}, bad: true},
+		{name: "extra list argument", args: []string{"demo", "structured-output", "example-1"}, bad: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestPersistentColorFlagContract(t *testing.T) {
 
 func TestResourceNameCompletion(t *testing.T) {
 	command := newTestRootCommand(t)
-	status, _, err := command.Find([]string{"resource", "status"})
+	status, _, err := command.Find([]string{"demo", "not-found"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,12 +235,12 @@ func TestResourceNameCompletion(t *testing.T) {
 func TestCommandTreesHaveIndependentFlags(t *testing.T) {
 	first := newTestRootCommand(t)
 	second := newTestRootCommand(t)
-	first.SetArgs([]string{"--output", "json", "resource", "list"})
+	first.SetArgs([]string{"--output", "json", "demo", "structured-output"})
 	first.SetOut(&bytes.Buffer{})
 	if err := first.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	second.SetArgs([]string{"resource", "list"})
+	second.SetArgs([]string{"demo", "structured-output"})
 	second.SetOut(&bytes.Buffer{})
 	if err := second.Execute(); err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		gotLogger = logger
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
-	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "resource", "list", "--timeout", "2m"})
+	command.SetArgs([]string{"--config", configFile, "--log-level", "debug", "demo", "structured-output", "--timeout", "2m"})
 	var output bytes.Buffer
 	command.SetOut(&output)
 
@@ -316,7 +316,7 @@ func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	command.SetContext(parentContext)
-	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	command.SetOut(&bytes.Buffer{})
 	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want timeout classification and context.DeadlineExceeded", err)
@@ -359,7 +359,7 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 				}
 				return app.NewResourceService(reader, logger, progressReporter), cleanup, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
-			command.SetArgs([]string{"resource", "list"})
+			command.SetArgs([]string{"demo", "structured-output"})
 			command.SetOut(&bytes.Buffer{})
 			err := command.Execute()
 			if test.setupFailure || test.operationFailure {
@@ -405,7 +405,7 @@ func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *t
 			return nil
 		}, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
-	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	command.SetOut(&bytes.Buffer{})
 	if err := command.Execute(); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want operation deadline", err)
@@ -456,7 +456,7 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 		factoryCalls++
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
-	command.SetArgs([]string{"--config", configFile, "resource", "list"})
+	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "open log file") {
 		t.Fatalf("Execute() error = %v, want log file initialization error", err)
 	}
@@ -477,12 +477,12 @@ func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(commandReader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), commandReader.Names())
-	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "resource", "list"})
+	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "demo", "structured-output"})
 	var stdout bytes.Buffer
 	var progress bytes.Buffer
 	command.SetOut(&stdout)
 	command.SetErr(&progress)
-	listCommand, _, err := command.Find([]string{"resource", "list"})
+	listCommand, _, err := command.Find([]string{"demo", "structured-output"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 			if test.quiet {
 				args = append(args, "--quiet")
 			}
-			args = append(args, "resource", "apply", "example-1")
+			args = append(args, "demo", "secret-credential", "example-1")
 			command.SetArgs(args)
 			var stdout, stderr bytes.Buffer
 			command.SetOut(&stdout)
@@ -569,7 +569,7 @@ func TestApplyProgressColor(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
 			command := NewRootCommand(memory.NewResourceReader(), testBuildInfo(), memory.NewResourceReader().Names())
-			command.SetArgs(append(append([]string{}, test.args...), "resource", "apply", "example-2"))
+			command.SetArgs(append(append([]string{}, test.args...), "demo", "secret-credential", "example-2"))
 			var stdout, stderr bytes.Buffer
 			command.SetOut(&stdout)
 			command.SetErr(&stderr)
@@ -598,7 +598,7 @@ func TestApplyProgressColor(t *testing.T) {
 func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
 	setupConfigEnvironment(t)
 	command := NewRootCommand(failingResourceReader{}, testBuildInfo(), memory.NewResourceReader().Names())
-	command.SetArgs([]string{"--quiet", "resource", "apply", "example-1"})
+	command.SetArgs([]string{"--quiet", "demo", "secret-credential", "example-1"})
 	var stdout, stderr bytes.Buffer
 	command.SetOut(&stdout)
 	command.SetErr(&stderr)
@@ -614,7 +614,7 @@ func TestProgressWriterErrorsDoNotReplaceApplyResult(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
 	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
-	command.SetArgs([]string{"--output", "json", "resource", "apply", "example-1"})
+	command.SetArgs([]string{"--output", "json", "demo", "secret-credential", "example-1"})
 	var stdout bytes.Buffer
 	command.SetOut(&stdout)
 	command.SetErr(failingWriter{err: errors.New("injected progress write failure")})
@@ -635,7 +635,7 @@ func TestRendererWriteErrorsAreReturned(t *testing.T) {
 	for _, format := range []string{"text", "json"} {
 		t.Run(format, func(t *testing.T) {
 			command := newTestRootCommand(t)
-			command.SetArgs([]string{"--output", format, "resource", "list"})
+			command.SetArgs([]string{"--output", format, "demo", "structured-output"})
 			command.SetOut(failingWriter{err: wantErr})
 			if err := command.Execute(); !errors.Is(err, wantErr) {
 				t.Fatalf("Execute() error = %v, want writer error", err)
@@ -671,7 +671,7 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				return app.NewResourceService(reader, logger, progressReporter), nil, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
-			command.SetArgs([]string{"--config", configPath, "resource", "list"})
+			command.SetArgs([]string{"--config", configPath, "demo", "structured-output"})
 			command.SetOut(&bytes.Buffer{})
 			err = command.Execute()
 			if failCommand && (err == nil || !strings.Contains(err.Error(), "injected reader failure")) {
@@ -738,7 +738,7 @@ func TestFactoryErrorPropagates(t *testing.T) {
 	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return nil, nil, wantErr
 	}, testBuildInfo(), nil)
-	command.SetArgs([]string{"resource", "list"})
+	command.SetArgs([]string{"demo", "structured-output"})
 
 	if err := command.Execute(); !errors.Is(err, wantErr) {
 		t.Fatalf("Execute() error = %v, want wrapped factory error", err)
@@ -825,7 +825,7 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
-		command.SetArgs([]string{"--config", path, "resource", "list"})
+		command.SetArgs([]string{"--config", path, "demo", "structured-output"})
 		command.SetOut(&bytes.Buffer{})
 		if err := command.Execute(); err != nil {
 			t.Fatalf("Execute() with %s: %v", path, err)
@@ -880,9 +880,9 @@ func TestCredentialResolvesOnlyWhenApplying(t *testing.T) {
 		{name: "help", args: []string{"--help"}},
 		{name: "completion", args: []string{"completion", "bash"}},
 		{name: "config show", args: []string{"config", "show"}},
-		{name: "resource list", args: []string{"resource", "list"}},
-		{name: "resource status", args: []string{"resource", "status", "example-1"}},
-		{name: "resource apply", args: []string{"resource", "apply", "example-1"}, wantCalls: 1},
+		{name: "demo structured-output", args: []string{"demo", "structured-output"}},
+		{name: "demo not-found", args: []string{"demo", "not-found", "example-1"}},
+		{name: "demo secret-credential", args: []string{"demo", "secret-credential", "example-1"}, wantCalls: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
