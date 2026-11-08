@@ -127,18 +127,40 @@ func TestStyledProgressReporterBar(t *testing.T) {
 	}
 }
 
-func TestSpinnerModelShowsTheBarOnlyWithATotal(t *testing.T) {
-	model := spinnerModel{spinner: spinner.New(), styles: newStyles()}
-	view := func(event app.ProgressEvent) string {
-		updated, _ := model.Update(labelFor(event))
-		return stripANSI(updated.View().Content)
+func TestSpinnerModelBar(t *testing.T) {
+	newModel := func() spinnerModel {
+		model := spinnerModel{spinner: spinner.New(), bar: newBar(), styles: newStyles()}
+		model.bar.SetSpringOptions(200, 1) // settles in a few frames, so the test stays quick
+		return model
 	}
-	if got, want := view(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
-		t.Fatalf("view with a total = %q, want %q", got, want)
-	}
-	if got := view(app.ProgressEvent{Phase: "working", Message: "Waiting"}); strings.ContainsAny(got, "█░%") {
-		t.Fatalf("view without a total = %q, want the spinner and no bar", got)
-	}
+
+	t.Run("a counted label targets Current/Total and starts the glide", func(t *testing.T) {
+		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
+		model := updated.(spinnerModel)
+		if got := model.bar.Percent(); got != 0.5 || cmd == nil {
+			t.Fatalf("target = %v, command = %v; want 0.5 and a frame command", got, cmd)
+		}
+		if got, want := stripANSI(model.View().Content), "░░░░░░░░░░░░░░░░░░░░   0% working Working (10/20)"; got != want {
+			t.Fatalf("view before any frame = %q, want %q (no jump)", got, want)
+		}
+		for range 200 {
+			if !model.bar.IsAnimating() {
+				break
+			}
+			next, frameCmd := model.Update(cmd())
+			model, cmd = next.(spinnerModel), frameCmd
+		}
+		if got, want := stripANSI(model.View().Content), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
+			t.Fatalf("view after the glide = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("an uncounted label shows the spinner and no bar", func(t *testing.T) {
+		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Message: "Waiting"}))
+		if got := stripANSI(updated.View().Content); cmd != nil || strings.ContainsAny(got, "█░%") {
+			t.Fatalf("view = %q, command = %v; want the spinner, no bar and no frame command", got, cmd)
+		}
+	})
 }
 
 func TestStyledProgressReporterSerializesConcurrentCalls(t *testing.T) {
