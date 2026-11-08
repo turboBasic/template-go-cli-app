@@ -11,9 +11,9 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 	writeFile(t, files.User, "[log.file]\nlevel = 'info'\n[log]\nlevel = 'info'\n")
 	writeFile(t, files.Project, "[log]\nlevel = 'error'\n")
 
-	result, err := loadWithSchema(files, []string{"CLI_APP_COLOR=never"}, map[string]FlagValue{
+	result, err := loadAt(files, []string{"CLI_APP_COLOR=never"}, map[string]FlagValue{
 		"quiet": {Value: true, Changed: true, Source: "--quiet"},
-	}, productionSchema(), root)
+	}, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestEntriesUnsourcedLeafIsUnknown(t *testing.T) {
 
 func TestEntriesReportJitterOverrideWithItsSource(t *testing.T) {
 	root := t.TempDir()
-	result, err := loadWithSchema(ConfigFiles{}, []string{"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.2"}, nil, productionSchema(), root)
+	result, err := loadAt(ConfigFiles{}, []string{"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.2"}, nil, root)
 	if err != nil {
 		t.Fatal(err)
 	}

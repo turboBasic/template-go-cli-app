@@ -25,11 +25,12 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (
 	if err != nil {
 		return LoadResult{}, fmt.Errorf("find working directory: %w", err)
 	}
-	return loadWithSchema(files, environment, flags, productionSchema(), workingDir)
+	return loadAt(files, environment, flags, workingDir)
 }
 
-func loadWithSchema(files ConfigFiles, environment []string, flags map[string]FlagValue, schema map[string]valueType, workingDir string) (LoadResult, error) {
-	result, err := mergeFilesWithSchema(files, schema)
+func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue, workingDir string) (LoadResult, error) {
+	schema := productionSchema()
+	result, err := mergeFiles(files)
 	if err != nil {
 		return LoadResult{}, err
 	}
