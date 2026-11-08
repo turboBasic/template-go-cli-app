@@ -26,7 +26,8 @@ func TestLoadFullPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{Log: LogConfig{Level: "debug", File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: true, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: Defaults().Retry}
+	want := Defaults()
+	want.Log.Level, want.Output, want.Quiet = "debug", "json", true
 	if got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}

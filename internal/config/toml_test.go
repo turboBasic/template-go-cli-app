@@ -17,17 +17,23 @@ func TestDecodeTOML(t *testing.T) {
 		{
 			name: "valid settings",
 			data: "output = 'json'\nquiet = true\n[log]\nlevel = 'debug'\n[log.file]\nlevel = 'error'\npath = 'logs/app.jsonl'\n",
-			want: Config{Log: LogConfig{Level: "debug", File: FileLogConfig{Level: "error", Path: "logs/app.jsonl"}}, Output: "json", Color: "auto", Quiet: true, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: Defaults().Retry},
+			want: withDefaults(func(c *Config) {
+				c.Log.Level, c.Log.File.Level, c.Log.File.Path, c.Output, c.Quiet = "debug", "error", "logs/app.jsonl", "json", true
+			}),
 		},
 		{
 			name: "valid operation timeouts",
 			data: "[timeouts]\ncleanup = '8s'\n[timeouts.demo]\nstructured_output = '30s'\nnot_found = '1m'\nsecret_credential = '45s'\n",
-			want: Config{Log: LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}}, Output: "text", Color: "auto", Timeouts: TimeoutConfig{Cleanup: 8 * time.Second, Demo: DemoTimeouts{StructuredOutput: durationPtr(30 * time.Second), NotFound: durationPtr(time.Minute), SecretCredential: durationPtr(45 * time.Second)}}, Retry: Defaults().Retry},
+			want: withDefaults(func(c *Config) {
+				c.Timeouts = TimeoutConfig{Cleanup: 8 * time.Second, Demo: DemoTimeouts{StructuredOutput: durationPtr(30 * time.Second), NotFound: durationPtr(time.Minute), SecretCredential: durationPtr(45 * time.Second)}}
+			}),
 		},
 		{
 			name: "valid status retry policy",
 			data: "[retry.demo.flaky_dependency]\nmax_attempts = 3\ninitial_delay = '100ms'\nmax_delay = '1s'\njitter = 0.25\n",
-			want: Config{Log: LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}}, Output: "text", Color: "auto", Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: RetryConfig{Demo: DemoRetryConfig{FlakyDependency: RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 100 * time.Millisecond, MaxDelay: time.Second, Jitter: 0.25}}}},
+			want: withDefaults(func(c *Config) {
+				c.Retry.Demo.FlakyDependency = RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 100 * time.Millisecond, MaxDelay: time.Second, Jitter: 0.25}
+			}),
 		},
 		{name: "malformed TOML", data: "log-level = [", wantIn: "settings.toml"},
 		{name: "unknown key", data: "log-levels = 'warn'\n", wantIn: `unknown key "log-levels"`},
