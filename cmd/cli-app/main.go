@@ -32,15 +32,20 @@ var (
 func main() {
 	resources := memory.NewResourceReader()
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		var reader app.ResourceReader = resources
-		if configured := effective.Retry.Demo.FlakyDependency; configured != nil {
-			retryingReader, err := retry.NewResourceReader(reader, retry.Policy(*configured), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())))
-			if err != nil {
-				return nil, nil, fmt.Errorf("configure status retries: %w", err)
+		statusRetries := func(reader app.ResourceReader) (app.ResourceReader, error) {
+			configured := effective.Retry.Demo.FlakyDependency
+			if configured == nil {
+				return reader, nil
 			}
-			reader = retryingReader
+			retrying, err := retry.NewResourceReader(reader, retry.Policy(*configured), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
+			if err != nil {
+				return nil, fmt.Errorf("configure status retries: %w", err)
+			}
+			return retrying, nil
 		}
-		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Demo.SecretCredential.Reference)), nil, nil
+		return app.NewResourceService(resources, logger, progressReporter,
+			app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Demo.SecretCredential.Reference),
+			app.WithStatusRetries(statusRetries)), nil, nil
 	}, buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
