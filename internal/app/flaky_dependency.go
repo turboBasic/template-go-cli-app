@@ -9,9 +9,9 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
-// flakyFailures is how often the demo dependency fails before it succeeds: two failures, so a policy of
+// FlakyFailures is how often the demo dependency fails before it succeeds: two failures, so a policy of
 // three attempts succeeds and one of two is exhausted.
-const flakyFailures = 2
+const FlakyFailures = 2
 
 // StatusRetries wraps a reader so its Status lookups are retried under the configured policy.
 type StatusRetries func(ResourceReader) (ResourceReader, error)
@@ -27,7 +27,7 @@ func WithStatusRetries(retries StatusRetries) ResourceOption {
 }
 
 // FlakyDependency is a demonstration of retries: it reads the status of a simulated dependency that fails
-// transiently flakyFailures times and then succeeds. The dependency is built per call, so every run starts
+// transiently FlakyFailures times and then succeeds. The dependency is built per call, so every run starts
 // from its first failure. Without a retry policy the first failure is final. A real application replaces
 // the simulated dependency with its own and deletes this demo.
 func (s *ResourceService) FlakyDependency(ctx context.Context) (domain.Resource, error) {
@@ -49,6 +49,8 @@ func (s *ResourceService) FlakyDependency(ctx context.Context) (domain.Resource,
 	if err := resource.Validate(); err != nil {
 		return domain.Resource{}, fmt.Errorf("flaky dependency: %w", Classify(ErrValidation, err))
 	}
+	// A retry leaves the spinner running; completion stops it before the caller prints the result.
+	s.reportProgress(ProgressEvent{Phase: "complete", Message: "Dependency read"})
 	return resource, nil
 }
 

@@ -105,7 +105,7 @@ func WithCredential(resolver SecretResolver, reference string) ResourceOption {
 
 // NewResourceService constructs a resource service with its required dependencies.
 func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter, options ...ResourceOption) *ResourceService {
-	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter, longRunning: longRunningDuration, flakyFailures: flakyFailures}
+	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter, longRunning: longRunningDuration, flakyFailures: FlakyFailures}
 	for _, option := range options {
 		option(s)
 	}

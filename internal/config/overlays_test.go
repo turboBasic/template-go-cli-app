@@ -26,7 +26,7 @@ func TestLoadFullPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{Log: LogConfig{Level: "debug", File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: true, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}}
+	want := Config{Log: LogConfig{Level: "debug", File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: true, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: Defaults().Retry}
 	if got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
@@ -101,8 +101,8 @@ func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := &RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
-	if got.Config.Retry.Demo.FlakyDependency == nil || *got.Config.Retry.Demo.FlakyDependency != *want {
+	want := RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
+	if got.Config.Retry.Demo.FlakyDependency != want {
 		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Demo.FlakyDependency, want)
 	}
 }

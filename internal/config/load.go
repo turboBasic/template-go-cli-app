@@ -73,6 +73,11 @@ func defaultValues() map[string]any {
 		"quiet":    config.Quiet,
 		"timeouts": map[string]any{"cleanup": config.Timeouts.Cleanup},
 		"demo":     map[string]any{"secret_credential": map[string]any{"reference": config.Demo.SecretCredential.Reference}},
+		"retry": map[string]any{"demo": map[string]any{"flaky_dependency": map[string]any{
+			"max_attempts":  config.Retry.Demo.FlakyDependency.MaxAttempts,
+			"initial_delay": config.Retry.Demo.FlakyDependency.InitialDelay,
+			"max_delay":     config.Retry.Demo.FlakyDependency.MaxDelay,
+		}}},
 	}
 }
 
