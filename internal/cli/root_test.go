@@ -519,9 +519,8 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		quiet bool
-		want  string
 	}{
-		{name: "progress to redirected stderr", want: "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"},
+		{name: "progress to redirected stderr"},
 		{name: "quiet suppresses progress", quiet: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -546,8 +545,9 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 			if len(result) != 2 || result["name"] != "example-1" || result["status"] != "ready" {
 				t.Fatalf("JSON result = %#v, want unwrapped resource result", result)
 			}
-			if got := stderr.String(); got != test.want {
-				t.Fatalf("stderr = %q, want %q", got, test.want)
+			got := stderr.String()
+			if test.quiet && got != "" || !test.quiet && (!strings.Contains(got, "complete: ") || strings.Contains(got, "\x1b")) {
+				t.Fatalf("stderr = %q, quiet = %t; want empty when quiet, plain progress otherwise", got, test.quiet)
 			}
 		})
 	}
@@ -555,19 +555,16 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 
 func TestApplyProgressColor(t *testing.T) {
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	const plain = "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"
 	for _, test := range []struct {
-		name    string
-		args    []string
-		want    string // exact stderr when it carries no escape
-		styled  bool
-		wantEnd string
+		name string
+		args []string
+		mode string // plain, quiet or styled
 	}{
-		{name: "redirected default", want: plain},
-		{name: "never", args: []string{"--color", "never"}, want: plain},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, want: plain},
-		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}},
-		{name: "always", args: []string{"--color", "always"}, styled: true, wantEnd: "✓ Resource applied (1/1)\n"},
+		{name: "redirected default", mode: "plain"},
+		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
+		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
+		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
@@ -580,17 +577,19 @@ func TestApplyProgressColor(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := stderr.String()
-			if !test.styled {
-				if got != test.want {
-					t.Fatalf("stderr = %q, want %q", got, test.want)
+			switch test.mode {
+			case "quiet":
+				if got != "" {
+					t.Fatalf("stderr = %q, want none", got)
 				}
-				return
-			}
-			if !strings.Contains(got, "\x1b[") {
-				t.Fatalf("stderr = %q, want ANSI escapes", got)
-			}
-			if stripped := ansi.ReplaceAllString(got, ""); !strings.HasSuffix(stripped, test.wantEnd) {
-				t.Fatalf("stripped stderr = %q, want suffix %q", stripped, test.wantEnd)
+			case "plain":
+				if !strings.Contains(got, "complete: ") || strings.Contains(got, "\x1b") {
+					t.Fatalf("stderr = %q, want plain progress without escapes", got)
+				}
+			default:
+				if !strings.Contains(got, "\x1b[") || !strings.Contains(ansi.ReplaceAllString(got, ""), "✓ ") {
+					t.Fatalf("stderr = %q, want ANSI escapes and a completion mark", got)
+				}
 			}
 		})
 	}

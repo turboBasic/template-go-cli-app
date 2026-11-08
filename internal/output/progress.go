@@ -14,7 +14,7 @@ func isComplete(event app.ProgressEvent) bool {
 	return event.Phase == "complete" || event.Total > 0 && event.Current >= event.Total
 }
 
-// PlainProgressReporter writes stable progress lines to its configured writer.
+// PlainProgressReporter writes plain, unanimated progress lines to its configured writer.
 type PlainProgressReporter struct {
 	mu     sync.Mutex
 	writer io.Writer
