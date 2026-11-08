@@ -66,7 +66,6 @@ func TestCLIContract(t *testing.T) {
 	}{
 		{"help flag", []string{"--help"}, append([]string{"resource", "completion", "help"}, flags...)},
 		{"help resource", []string{"help", "resource"}, append([]string{"list", "status", "apply"}, flags...)},
-		{"help unknown topic", []string{"help", "nope"}, []string{"resource", "completion"}},
 		{"resource status help", []string{"resource", "status", "--help"}, append([]string{"status"}, flags...)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -78,6 +77,15 @@ func TestCLIContract(t *testing.T) {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("stdout does not mention %q:\n%s", want, stdout)
 				}
+			}
+		})
+	}
+
+	for _, args := range [][]string{{"help", "nope"}, {"help", "resource", "nope"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			_, stderr, code := runCLIProcess(t, binary, args...)
+			if code != 2 || !strings.Contains(stderr, `unknown command "nope"`) {
+				t.Fatalf("%v = exit %d, stderr %q; want exit 2 and an unknown command diagnostic", args, code, stderr)
 			}
 		})
 	}

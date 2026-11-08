@@ -204,6 +204,15 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
 	root.AddCommand(resource, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
+	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
+	root.InitDefaultHelpCmd()
+	help, _, _ := root.Find([]string{"help"})
+	help.Args = func(cmd *cobra.Command, args []string) error {
+		if target, rest, _ := cmd.Root().Find(args); len(rest) > 0 {
+			return app.Classify(app.ErrValidation, unknownCommandError(target, rest[0]))
+		}
+		return nil
+	}
 	return root
 }
 
