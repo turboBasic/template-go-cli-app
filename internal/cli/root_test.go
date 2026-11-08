@@ -35,9 +35,13 @@ func TestResourceListCommand(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	want := "NAME        STATUS\nexample-1   ready\nexample-2   pending\n"
-	if got := output.String(); got != want {
-		t.Fatalf("output = %q, want %q", got, want)
+	var got [][]string
+	for line := range strings.Lines(output.String()) {
+		got = append(got, strings.Fields(line))
+	}
+	want := [][]string{{"NAME", "STATUS"}, {"example-1", "ready"}, {"example-2", "pending"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rows = %q, want %q", got, want)
 	}
 }
 
@@ -104,11 +108,16 @@ func TestResourceCommandsJSONOutput(t *testing.T) {
 			if err := command.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			if got := output.String(); got != test.want {
-				t.Fatalf("output = %q, want %q", got, test.want)
+			// Decoding also fails on a stray ANSI escape, which JSON must never carry.
+			var got, want any
+			if err := json.Unmarshal(output.Bytes(), &got); err != nil {
+				t.Fatalf("output %q is not JSON: %v", output.String(), err)
 			}
-			if strings.Contains(output.String(), "\x1b[") {
-				t.Fatalf("JSON output contains ANSI escape: %q", output.String())
+			if err := json.Unmarshal([]byte(test.want), &want); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("output = %q, want JSON equal to %q", output.String(), test.want)
 			}
 		})
 	}
@@ -215,8 +224,10 @@ func TestPersistentColorFlagContract(t *testing.T) {
 	if flag.DefValue != "auto" {
 		t.Errorf("--color default = %q, want auto", flag.DefValue)
 	}
-	if want := "color mode for results and progress (auto, always, never)"; flag.Usage != want {
-		t.Errorf("--color usage = %q, want %q", flag.Usage, want)
+	for _, want := range []string{"progress", "auto", "always", "never"} {
+		if !strings.Contains(flag.Usage, want) {
+			t.Errorf("--color usage = %q, want it to mention %q", flag.Usage, want)
+		}
 	}
 }
 

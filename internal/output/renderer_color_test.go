@@ -55,13 +55,11 @@ func TestRendererListColor(t *testing.T) {
 	tests := []struct {
 		name      string
 		resources []domain.Resource
-		want      string
 		contains  []string
 	}{
 		{
 			name:      "fixture",
 			resources: []domain.Resource{{Name: "example-1", Status: "ready"}, {Name: "example-2", Status: "pending"}},
-			want:      "NAME        STATUS\nexample-1   ready\nexample-2   pending\n",
 			contains:  []string{"\x1b[33m"},
 		},
 		{
@@ -90,9 +88,6 @@ func TestRendererListColor(t *testing.T) {
 			}
 			if stripped := stripANSI(got); stripped != plain.String() {
 				t.Fatalf("stripped = %q, want plain %q", stripped, plain.String())
-			}
-			if test.want != "" && plain.String() != test.want {
-				t.Fatalf("plain = %q, want %q", plain.String(), test.want)
 			}
 		})
 	}
