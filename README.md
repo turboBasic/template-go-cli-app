@@ -49,7 +49,11 @@ GoReleaser; it wipes `dist/`, including the binary `just build` leaves there. Pu
 tag publishes a GitHub Release through `.github/workflows/release.yml`, using `.goreleaser.yaml`.
 A generated repository releases under its own name after `mise run init`. Releases carry SPDX
 SBOMs, a `checksums.txt` signed with keyless Cosign and, for public repositories, a provenance
-attestation; the signing is not Apple notarization, and builds are not reproducible.
+attestation; the signing is not Apple notarization, and builds are not reproducible. When the
+repository's `HOMEBREW_TAP_TOKEN` secret is set, a release also publishes a Homebrew cask to
+`<owner>/homebrew-tap`; create that repository and a token with write access to it first. Without
+the secret the release skips the tap. Install with `brew install --cask <owner>/tap/<name>`; direct
+GitHub downloads stay available.
 
 ## License
 

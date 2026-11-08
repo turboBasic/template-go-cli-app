@@ -31,6 +31,7 @@ jobs:
       - name: Publish the GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: mise exec -- goreleaser release --clean
 
       # Skipped for private repositories, where attesting is not available on every plan.

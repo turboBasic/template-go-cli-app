@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Assert that a GoReleaser snapshot in dist/ holds the four release archives, their four SPDX
-# SBOMs, a checksums.txt covering all eight and a host binary that carries its injected version.
+# SBOMs, a checksums.txt covering all eight, a Homebrew cask naming the four archives and a host
+# binary that carries its injected version.
 #
 # Usage:
 #   ./scripts/check-release.sh <binary-name>
@@ -25,6 +26,7 @@ main() {
   check_archives "$name"
   check_sboms "$name"
   check_checksums
+  check_cask "$name"
   check_host_version "$name"
   echo "release snapshot OK"
 }
@@ -58,6 +60,13 @@ check_checksums() {
   lines="$(wc -l <checksums.txt)"
   ((lines == 8)) || fail "checksums.txt has $lines lines, want 8 (four archives, four SBOMs)"
   shasum -a 256 -c checksums.txt >/dev/null || fail "checksums.txt does not match the archives"
+}
+
+check_cask() {
+  local cask="homebrew/Casks/$1.rb" urls
+  [[ -f "$cask" ]] || fail "missing cask $cask"
+  urls="$(grep -c '\.tar\.gz"' "$cask" || true)"
+  ((urls == 4)) || fail "$cask names $urls .tar.gz URLs, want 4"
 }
 
 check_host_version() {

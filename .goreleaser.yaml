@@ -46,6 +46,18 @@ signs:
     signature: "${artifact}.sigstore.json"
     args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
 
+homebrew_casks:
+  - repository:
+      owner: '{{ index .Env "GITHUB_REPOSITORY_OWNER" }}'
+      name: homebrew-tap
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+    homepage: 'https://github.com/{{ index .Env "GITHUB_REPOSITORY" }}'
+    description: '{{ .ProjectName }} command-line tool'
+    caveats: |
+      {{ .ProjectName }} is not signed or notarized by Apple. If macOS blocks it, run:
+        xattr -d com.apple.quarantine "$(which {{ .ProjectName }})"
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+
 release:
   prerelease: auto
 

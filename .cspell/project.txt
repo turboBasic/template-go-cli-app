@@ -34,5 +34,6 @@ taplo
 TCGETS
 testdata
 WCAG
+xattr
 zizmor
 zizmorcore
