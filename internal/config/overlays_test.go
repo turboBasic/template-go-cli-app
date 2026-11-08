@@ -93,17 +93,17 @@ func TestLoadOperationTimeoutEnvironment(t *testing.T) {
 
 func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
 	got, err := load(ConfigFiles{}, []string{
-		"CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_ATTEMPTS=4",
-		"CLI_APP_RETRY_DEMO_NOT_FOUND_INITIAL_DELAY=25ms",
-		"CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_DELAY=2s",
-		"CLI_APP_RETRY_DEMO_NOT_FOUND_JITTER=0.3",
+		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_ATTEMPTS=4",
+		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_INITIAL_DELAY=25ms",
+		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_DELAY=2s",
+		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.3",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := &RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
-	if got.Config.Retry.Demo.NotFound == nil || *got.Config.Retry.Demo.NotFound != *want {
-		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Demo.NotFound, want)
+	if got.Config.Retry.Demo.FlakyDependency == nil || *got.Config.Retry.Demo.FlakyDependency != *want {
+		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Demo.FlakyDependency, want)
 	}
 }
 

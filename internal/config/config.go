@@ -36,7 +36,7 @@ type RetryConfig struct {
 
 // DemoRetryConfig holds retry policies for the reference demo commands.
 type DemoRetryConfig struct {
-	NotFound *RetryPolicyConfig `koanf:"not_found"`
+	FlakyDependency *RetryPolicyConfig `koanf:"flaky_dependency"`
 }
 
 // RetryPolicyConfig is a bounded retry policy for one configured operation.
@@ -112,16 +112,16 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid %s %s: must be positive", setting.key, *setting.timeout)
 		}
 	}
-	if c.Retry.Demo.NotFound != nil {
-		policy := c.Retry.Demo.NotFound
+	if c.Retry.Demo.FlakyDependency != nil {
+		policy := c.Retry.Demo.FlakyDependency
 		if policy.MaxAttempts < 1 {
-			return fmt.Errorf("invalid retry.demo.not_found.max_attempts: must be positive")
+			return fmt.Errorf("invalid retry.demo.flaky_dependency.max_attempts: must be positive")
 		}
 		if policy.InitialDelay < 0 || policy.MaxDelay < 0 || (policy.MaxAttempts > 1 && (policy.InitialDelay == 0 || policy.MaxDelay < policy.InitialDelay)) {
-			return fmt.Errorf("invalid retry.demo.not_found delays: require 0 < initial <= max for multiple attempts")
+			return fmt.Errorf("invalid retry.demo.flaky_dependency delays: require 0 < initial <= max for multiple attempts")
 		}
 		if math.IsNaN(policy.Jitter) || policy.Jitter < 0 || policy.Jitter > 1 {
-			return fmt.Errorf("invalid retry.demo.not_found.jitter: must be between 0 and 1")
+			return fmt.Errorf("invalid retry.demo.flaky_dependency.jitter: must be between 0 and 1")
 		}
 	}
 	if ref := c.Demo.SecretCredential.Reference; ref != "" {

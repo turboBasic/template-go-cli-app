@@ -216,3 +216,52 @@ func isolatedEnv() []string {
 	}
 	return env
 }
+
+func TestCLIProcessFlakyDependency(t *testing.T) {
+	binary := buildCLIProcess(t, "")
+	policy := func(attempts, initial, maximum string) []string {
+		return []string{
+			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_ATTEMPTS=" + attempts,
+			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_INITIAL_DELAY=" + initial,
+			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_DELAY=" + maximum,
+		}
+	}
+	tests := []struct {
+		name        string
+		env         []string
+		args        []string
+		wantCode    int
+		wantStdout  string // exact stdout, or empty to require none
+		wantStderr  string // substring of stderr
+		wantRetries int    // exact count of "retrying:" lines on stderr
+		silent      bool   // stderr must be empty
+	}{
+		{name: "no policy fails at the first failure", wantCode: 1, wantStderr: "unavailable error"},
+		{name: "a policy of three attempts succeeds", env: policy("3", "1ms", "2ms"), wantStdout: "flaky-dependency: ready\n", wantRetries: 2},
+		{name: "a policy of two attempts is exhausted", env: policy("2", "1ms", "2ms"), wantCode: 1, wantStderr: "retry exhausted after 2 attempts", wantRetries: 1},
+		{name: "JSON stdout is the one result and the retries stay on stderr", env: policy("3", "1ms", "2ms"), args: []string{"--output", "json"},
+			wantStdout: `{"name":"flaky-dependency","status":"ready"}` + "\n", wantRetries: 2},
+		{name: "quiet silences the retries", env: policy("3", "1ms", "2ms"), args: []string{"--quiet"}, wantStdout: "flaky-dependency: ready\n", silent: true},
+		{name: "the timeout cuts a retry wait short", env: policy("3", "10s", "10s"), args: []string{"--timeout", "100ms"}, wantCode: 124, wantStderr: "timeout error", wantRetries: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			started := time.Now()
+			args := append([]string{}, tt.args...)
+			args = append(args, "demo", "flaky-dependency")
+			stdout, stderr, code := runCLIProcessEnv(t, binary, tt.env, args...)
+			if code != tt.wantCode || stdout != tt.wantStdout || !strings.Contains(stderr, tt.wantStderr) {
+				t.Fatalf("exit %d, stdout %q, stderr %q; want exit %d, stdout %q, stderr containing %q", code, stdout, stderr, tt.wantCode, tt.wantStdout, tt.wantStderr)
+			}
+			if tt.silent && stderr != "" {
+				t.Fatalf("stderr = %q, want it empty", stderr)
+			}
+			if got := strings.Count(stderr, "retrying: "); got != tt.wantRetries {
+				t.Fatalf("stderr %q has %d retrying lines, want %d", stderr, got, tt.wantRetries)
+			}
+			if elapsed := time.Since(started); elapsed > 5*time.Second {
+				t.Fatalf("took %s, want it to finish without waiting out a backoff", elapsed)
+			}
+		})
+	}
+}
