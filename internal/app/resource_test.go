@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 type fakeResourceReader struct {
@@ -22,7 +21,7 @@ type fakeResourceReader struct {
 	err       error
 	apply     func(context.Context, string) (domain.Resource, error)
 	// credentials records the credential of every Apply call when set.
-	credentials *[]logging.Secret
+	credentials *[]Secret
 }
 
 func (r fakeResourceReader) List(context.Context) ([]domain.Resource, error) {
@@ -33,7 +32,7 @@ func (r fakeResourceReader) Status(context.Context, string) (domain.Resource, er
 	return r.resource, r.err
 }
 
-func (r fakeResourceReader) Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error) {
+func (r fakeResourceReader) Apply(ctx context.Context, name string, credential Secret) (domain.Resource, error) {
 	if r.credentials != nil {
 		*r.credentials = append(*r.credentials, credential)
 	}
@@ -193,12 +192,12 @@ func newTestResourceService(reader ResourceReader, progressReporters ...Progress
 
 type fakeResolver struct {
 	calls []string
-	value logging.Secret
+	value Secret
 	err   error
 	block bool
 }
 
-func (r *fakeResolver) Resolve(ctx context.Context, reference string) (logging.Secret, error) {
+func (r *fakeResolver) Resolve(ctx context.Context, reference string) (Secret, error) {
 	r.calls = append(r.calls, reference)
 	if r.block {
 		<-ctx.Done()
@@ -218,14 +217,14 @@ func TestResourceServiceApplyCredential(t *testing.T) {
 		resolver     *fakeResolver
 		noResolver   bool
 		wantCalls    int
-		wantApplied  []logging.Secret
+		wantApplied  []Secret
 		wantEvents   int
 		wantErr      error
 		notErr       error
 		wantContains string
 	}{
-		{name: "unset", reference: "", resolver: &fakeResolver{value: "x"}, wantApplied: []logging.Secret{""}, wantEvents: 3},
-		{name: "set", reference: reference, resolver: &fakeResolver{value: "resolved"}, wantCalls: 1, wantApplied: []logging.Secret{"resolved"}, wantEvents: 3},
+		{name: "unset", reference: "", resolver: &fakeResolver{value: "x"}, wantApplied: []Secret{""}, wantEvents: 3},
+		{name: "set", reference: reference, resolver: &fakeResolver{value: "resolved"}, wantCalls: 1, wantApplied: []Secret{"resolved"}, wantEvents: 3},
 		{name: "missing secret", reference: reference, resolver: &fakeResolver{err: Classify(ErrValidation, errors.New("item not found"))}, wantCalls: 1, wantErr: ErrValidation, notErr: ErrAuthentication},
 		{name: "authentication failure", reference: reference, resolver: &fakeResolver{err: Classify(ErrAuthentication, errors.New("signed out"))}, wantCalls: 1, wantErr: ErrAuthentication, notErr: ErrValidation},
 		{name: "no resolver", reference: reference, noResolver: true, wantErr: ErrValidation, wantContains: "no secret provider configured"},
@@ -236,7 +235,7 @@ func TestResourceServiceApplyCredential(t *testing.T) {
 			if ctx == nil {
 				ctx = context.Background()
 			}
-			var applied []logging.Secret
+			var applied []Secret
 			var events []ProgressEvent
 			options := []ResourceOption{WithCredential(test.resolver, test.reference)}
 			if test.noResolver {
@@ -296,5 +295,14 @@ func TestResourceServiceApplyCredentialNeverLogged(t *testing.T) {
 	}
 	if logs.Len() == 0 || strings.Contains(logs.String(), value) {
 		t.Fatalf("logs = %q, want output that never contains the resolved value", logs.String())
+	}
+}
+
+// The plain handler and the non-sensitive key mean only Secret's own LogValue can keep the value out.
+func TestSecretIsNotLogged(t *testing.T) {
+	var output bytes.Buffer
+	slog.New(slog.NewJSONHandler(&output, nil)).Info("connect", slog.Any("credential", Secret("never-print-this")))
+	if strings.Contains(output.String(), "never-print-this") {
+		t.Fatalf("log output = %q, want the secret kept out", output.String())
 	}
 }

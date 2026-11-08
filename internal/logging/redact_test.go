@@ -9,15 +9,6 @@ import (
 	"testing"
 )
 
-func TestSecretLogValue(t *testing.T) {
-	var output bytes.Buffer
-	logger := slog.New(redact(slog.NewJSONHandler(&output, nil)))
-	logger.Info("connect", slog.Any("token", Secret("never-print-this")))
-	if strings.Contains(output.String(), "never-print-this") || !strings.Contains(output.String(), "[REDACTED]") {
-		t.Fatalf("log output = %q, want redacted secret", output.String())
-	}
-}
-
 func TestRedactConcurrentReuseOfGroup(t *testing.T) {
 	var output bytes.Buffer
 	logger := slog.New(redact(slog.NewJSONHandler(&output, nil)))

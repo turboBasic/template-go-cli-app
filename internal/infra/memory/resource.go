@@ -7,7 +7,6 @@ import (
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 // ResourceReader provides the reference resources from local memory.
@@ -60,7 +59,7 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 }
 
 // Apply marks a local fixture ready.
-func (r *ResourceReader) Apply(ctx context.Context, name string, _ logging.Secret) (domain.Resource, error) {
+func (r *ResourceReader) Apply(ctx context.Context, name string, _ app.Secret) (domain.Resource, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, err
 	}
