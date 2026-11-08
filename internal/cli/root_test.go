@@ -946,13 +946,13 @@ func TestDemoLongRunningProgress(t *testing.T) {
 					t.Fatalf("stderr = %q, want none", got)
 				}
 			case "plain":
-				if !strings.Contains(got, "working: Working (7/20)\n") || !strings.HasSuffix(got, "complete: Long-running demo complete (20/20)\n") || strings.Contains(got, "\x1b") {
+				if !strings.Contains(got, "working: Working (7/100)\n") || !strings.HasSuffix(got, "complete: Long-running demo complete (100/100)\n") || strings.Contains(got, "\x1b") {
 					t.Fatalf("stderr = %q, want plain counted lines ending in completion, with no escapes", got)
 				}
 			default:
 				plain := ansi.ReplaceAllString(got, "")
-				if !strings.Contains(got, "\x1b[") || !strings.Contains(plain, "███████░░░░░░░░░░░░░  35% working Working (7/20)\n") || !strings.HasSuffix(plain, "✓ Long-running demo complete (20/20)\n") {
-					t.Fatalf("stderr = %q, want the bar at 35%% and the completion line last", got)
+				if !strings.Contains(got, "\x1b[") || !strings.Contains(plain, strings.Repeat("█", 4)+strings.Repeat("░", 46)+"   7% working Working (7/100)\n") || !strings.HasSuffix(plain, "✓ Long-running demo complete (100/100)\n") {
+					t.Fatalf("stderr = %q, want the bar at 7%% and the completion line last", got)
 				}
 			}
 		})

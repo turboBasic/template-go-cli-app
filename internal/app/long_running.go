@@ -8,7 +8,7 @@ import (
 
 const (
 	longRunningDuration = 30 * time.Second
-	longRunningSteps    = 20
+	longRunningSteps    = 100
 )
 
 // WithLongRunningDuration replaces the length of the LongRunning demo; tests use it to avoid the wait.
@@ -17,7 +17,8 @@ func WithLongRunningDuration(duration time.Duration) ResourceOption {
 }
 
 // LongRunning is a demonstration of determinate progress: it counts longRunningSteps steps across the
-// configured duration, reporting each one with Current and Total, then completion. A real application
+// configured duration, reporting each one with Current and Total, then completion. A hundred steps of 1%
+// keep the bar moving smoothly. A real application
 // replaces it with its own counted work and deletes this demo.
 func (s *ResourceService) LongRunning(ctx context.Context) error {
 	s.logger.DebugContext(ctx, "running the long-running demo")

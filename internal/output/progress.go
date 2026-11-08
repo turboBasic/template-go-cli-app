@@ -187,7 +187,7 @@ func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
 }
 
 const (
-	barCells     = 20
+	barCells     = 50
 	percentCells = len(" 100%") // the model counts its percentage text in the width
 )
 
@@ -195,7 +195,8 @@ const (
 // (purple to pink) so the colour shows how far the work has come. Full blocks keep one cell per
 // step; the empty cells are a plain grey because the model colours them and cannot be Faint.
 func newBar() progress.Model {
-	bar := progress.New(progress.WithDefaultBlend(), progress.WithFillCharacters('█', '░'), progress.WithWidth(barCells+percentCells))
+	// A soft spring (frequency 8) keeps the fill moving until the next step arrives.
+	bar := progress.New(progress.WithDefaultBlend(), progress.WithFillCharacters('█', '░'), progress.WithWidth(barCells+percentCells), progress.WithSpringOptions(8, 1))
 	bar.EmptyColor = lipgloss.Color("8")
 	return bar
 }

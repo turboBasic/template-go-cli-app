@@ -112,16 +112,16 @@ func TestStyledProgressReporter(t *testing.T) {
 }
 
 func TestStyledProgressReporterBar(t *testing.T) {
-	const bar = "█████░░░░░░░░░░░░░░░  25%"
+	bar := barOf(25) + "  50%"
 	var out bytes.Buffer
 	reporter := NewStyledProgressReporter(&out, false)
-	reporter.Report(app.ProgressEvent{Phase: "working", Current: 5, Total: 20, Message: "Working"})
+	reporter.Report(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"})
 	reporter.Report(app.ProgressEvent{Phase: "working", Message: "Waiting"})
 	reporter.Report(app.ProgressEvent{Phase: "complete", Current: 20, Total: 20, Message: "Done"})
 	if !strings.Contains(out.String(), "\x1b[") {
 		t.Fatalf("output = %q, want ANSI escapes", out.String())
 	}
-	want := bar + " working Working (5/20)\nworking Waiting\n✓ Done (20/20)\n"
+	want := bar + " working Working (10/20)\nworking Waiting\n✓ Done (20/20)\n"
 	if got := stripANSI(out.String()); got != want {
 		t.Fatalf("stripped output = %q, want %q", got, want)
 	}
@@ -149,7 +149,7 @@ func TestSpinnerModelBar(t *testing.T) {
 		if got := model.bar.Percent(); got != 0.5 || cmd == nil {
 			t.Fatalf("target = %v, command = %v; want 0.5 and a frame command", got, cmd)
 		}
-		if got, want := stripANSI(model.View().Content), "░░░░░░░░░░░░░░░░░░░░   0% working Working (10/20)"; got != want {
+		if got, want := stripANSI(model.View().Content), barOf(0)+"   0% working Working (10/20)"; got != want {
 			t.Fatalf("view before any frame = %q, want %q (no jump)", got, want)
 		}
 		for range 200 {
@@ -159,7 +159,7 @@ func TestSpinnerModelBar(t *testing.T) {
 			next, frameCmd := model.Update(cmd())
 			model, cmd = next.(spinnerModel), frameCmd
 		}
-		if got, want := stripANSI(model.View().Content), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
+		if got, want := stripANSI(model.View().Content), barOf(25)+"  50% working Working (10/20)"; got != want {
 			t.Fatalf("view after the glide = %q, want %q", got, want)
 		}
 	})
@@ -306,3 +306,8 @@ func TestNoopProgressReporter(t *testing.T) {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+// barOf is the bar text with filled of its barCells cells filled.
+func barOf(filled int) string {
+	return strings.Repeat("█", filled) + strings.Repeat("░", barCells-filled)
+}
