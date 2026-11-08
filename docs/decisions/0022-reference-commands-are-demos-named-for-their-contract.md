@@ -10,7 +10,8 @@ scope: cli
 ## Decision
 
 Every reference command lives under `cli-app demo` and is named for the one contract it demonstrates:
-`demo structured-output`, `demo not-found <name>`, `demo secret-credential <name>` and `demo long-running`.
+`demo structured-output`, `demo not-found <name>`, `demo secret-credential <name>`, `demo long-running` and
+`demo flaky-dependency`.
 A demo's configuration keys and `CLI_APP_*` variables carry the command's name, with `-` written as `_`, under
 a `demo` group (`timeouts.demo.<name>`, `retry.demo.<name>`, `demo.<name>.<setting>`). No alias keeps an old
 name alive. `config show`, `completion` and `help` are the application's own contract and stay outside the group.
@@ -49,7 +50,7 @@ configured timeouts. Evidence is in #84.
 ## Consequences
 
 - A command that only demonstrates a contract is added under `demo` with that contract's name, never under a
-  domain noun. The `Short` of each demo begins `Demonstrate`, pinned by `TestDemoCommands`.
+  domain noun. The `Short` of each demo begins `Demonstrate`, pinned by `TestDemoCommandsAreDemonstrations`.
 - An old key in a configuration file fails with an unknown-key error and exit 2. An old `CLI_APP_*` variable is
   ignored silently, because the loader skips a variable it does not know.
 - The internal names (`ResourceService`, the `memory` fixture) stay: the simulated domain is what the demos run on.
