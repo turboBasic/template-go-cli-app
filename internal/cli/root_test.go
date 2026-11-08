@@ -564,7 +564,7 @@ func TestApplyProgressColor(t *testing.T) {
 	}{
 		{name: "redirected default", mode: "plain"},
 		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "json with always styles stderr progress", args: []string{"--output", "json", "--color", "always"}, mode: "styled"},
 		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
 		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
@@ -921,7 +921,7 @@ func TestDemoLongRunningProgress(t *testing.T) {
 	}{
 		{name: "redirected default", mode: "plain"},
 		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "json with always styles stderr progress", args: []string{"--output", "json", "--color", "always"}, mode: "styled"},
 		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
 		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
