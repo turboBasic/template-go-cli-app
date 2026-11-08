@@ -142,7 +142,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		}
 		loadResult = loaded
 		cleanupTimeout = loaded.Config.Timeouts.Cleanup
-		_, noColor := os.LookupEnv("NO_COLOR")
+		noColor := os.Getenv("NO_COLOR") != ""
 		renderer = output.Renderer{
 			Writer: cmd.OutOrStdout(),
 			Options: output.Options{

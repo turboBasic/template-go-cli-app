@@ -21,6 +21,7 @@ func TestRendererResourceColor(t *testing.T) {
 		wantStyled bool
 	}{
 		{name: "always", options: Options{Format: FormatText, Color: ColorAlways}, wantStyled: true},
+		{name: "always overrides NO_COLOR", options: Options{Format: FormatText, Color: ColorAlways, NoColor: true}, wantStyled: true},
 		{name: "auto on stdout terminal", options: Options{Format: FormatText, Color: ColorAuto, Terminals: TerminalCapabilities{Stdout: true}}, wantStyled: true},
 		{name: "auto redirected", options: Options{Format: FormatText, Color: ColorAuto}},
 		{name: "auto with NO_COLOR", options: Options{Format: FormatText, Color: ColorAuto, Terminals: TerminalCapabilities{Stdout: true}, NoColor: true}},
