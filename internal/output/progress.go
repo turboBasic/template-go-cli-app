@@ -88,7 +88,7 @@ func (r *StyledProgressReporter) Report(event app.ProgressEvent) {
 		if r.program == nil {
 			r.startProgram()
 		}
-		r.program.Send(labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event), current: event.Current, total: event.Total})
+		r.program.Send(labelFor(event))
 		return
 	}
 	r.stopProgram()
@@ -117,6 +117,11 @@ func (r *StyledProgressReporter) stopProgram() {
 type labelMsg struct {
 	phase, detail  string
 	current, total int
+}
+
+// labelFor converts an event into the spinner model's label, carrying the counts the bar needs.
+func labelFor(event app.ProgressEvent) labelMsg {
+	return labelMsg{phase: event.Phase, detail: event.Message + progressCounter(event), current: event.Current, total: event.Total}
 }
 
 type stopMsg struct{}

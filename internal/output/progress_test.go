@@ -129,14 +129,14 @@ func TestStyledProgressReporterBar(t *testing.T) {
 
 func TestSpinnerModelShowsTheBarOnlyWithATotal(t *testing.T) {
 	model := spinnerModel{spinner: spinner.New(), styles: newStyles()}
-	view := func(msg labelMsg) string {
-		updated, _ := model.Update(msg)
+	view := func(event app.ProgressEvent) string {
+		updated, _ := model.Update(labelFor(event))
 		return stripANSI(updated.View().Content)
 	}
-	if got, want := view(labelMsg{phase: "working", detail: "Working (10/20)", current: 10, total: 20}), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
+	if got, want := view(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}), "██████████░░░░░░░░░░  50% working Working (10/20)"; got != want {
 		t.Fatalf("view with a total = %q, want %q", got, want)
 	}
-	if got := view(labelMsg{phase: "working", detail: "Waiting"}); strings.ContainsAny(got, "█░%") {
+	if got := view(app.ProgressEvent{Phase: "working", Message: "Waiting"}); strings.ContainsAny(got, "█░%") {
 		t.Fatalf("view without a total = %q, want the spinner and no bar", got)
 	}
 }
