@@ -255,7 +255,8 @@ func closeAfterRun(command *cobra.Command, cleanup func(context.Context) error) 
 	}
 }
 
-// unknownCommandError reproduces Cobra's own unknown-command message, suggestions included.
+// unknownCommandError builds the unknown-command error by hand: setting Args turns off Cobra's own check,
+// whose error would be unclassified (exit 1) and whose suggestion helper is unexported.
 func unknownCommandError(cmd *cobra.Command, name string) error {
 	message := fmt.Sprintf("unknown command %q for %q", name, cmd.CommandPath())
 	if !cmd.DisableSuggestions {
