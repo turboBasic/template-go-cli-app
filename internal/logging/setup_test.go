@@ -15,7 +15,7 @@ import (
 
 func TestDefaultLoggingDestinations(t *testing.T) {
 	var stderr bytes.Buffer
-	result, err := newWithWriters(config.Defaults().Log, &stderr)
+	result, err := New(config.Defaults().Log, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestFileLoggingIsJSONLinesWithIndependentLevelsAndRestrictedMode(t *testing
 	cfg := config.Defaults().Log
 	cfg.File.Path = path
 	var stderr bytes.Buffer
-	result, err := newWithWriters(cfg, &stderr)
+	result, err := New(cfg, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,15 +96,15 @@ func TestFileLoggingInitializationFailures(t *testing.T) {
 			cfg := config.Defaults().Log
 			path := filepath.Join(t.TempDir(), "app.jsonl")
 			test.edit(&cfg, path)
-			if _, err := newWithWriters(cfg, &bytes.Buffer{}); err == nil {
-				t.Fatal("newWithWriters() error = nil, want initialization error")
+			if _, err := New(cfg, &bytes.Buffer{}); err == nil {
+				t.Fatal("New() error = nil, want initialization error")
 			}
 		})
 	}
 }
 
 func TestCloseWithoutFileIsSafe(t *testing.T) {
-	result, err := newWithWriters(config.Defaults().Log, &bytes.Buffer{})
+	result, err := New(config.Defaults().Log, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}

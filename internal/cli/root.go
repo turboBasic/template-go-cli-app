@@ -161,7 +161,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if cmd.Annotations[inspectionOnly] != "" {
 			return nil
 		}
-		logResult, err = logging.New(loaded.Config.Log)
+		logResult, err = logging.New(loaded.Config.Log, cmd.ErrOrStderr())
 		if err != nil {
 			return fmt.Errorf("initialize logging: %w", err)
 		}
