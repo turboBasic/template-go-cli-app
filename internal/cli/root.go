@@ -345,13 +345,20 @@ func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
 		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
 			"color-capable terminal shows a bar that fills. Redirected stderr, --output json and --quiet keep plain lines or\n" +
-			"silence. The length is fixed in the template; press Ctrl-C to cancel.",
+			"silence. The length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 			if cmd.Flags().Changed("timeout") {
-				return app.Classify(app.ErrValidation, errors.New("demo long-running has a fixed length; --timeout does not apply"))
+				timeout, err := cmd.Flags().GetDuration("timeout")
+				if err != nil || timeout <= 0 {
+					return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeout))
+				}
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
 			}
-			return getResources().LongRunning(cmd.Context())
+			return getResources().LongRunning(ctx)
 		},
 	})
 	return demo

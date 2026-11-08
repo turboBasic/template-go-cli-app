@@ -23,7 +23,7 @@ func TestCLIContract(t *testing.T) {
 		{"unknown resource subcommand", []string{"resource", "bogus"}, "unknown command \"bogus\" for \"cli-app resource\"\n"},
 		{"unknown demo subcommand", []string{"demo", "bogus"}, "unknown command \"bogus\" for \"cli-app demo\"\n"},
 		{"extra argument to a demo", []string{"demo", "long-running", "extra"}, "unknown command \"extra\" for \"cli-app demo long-running\"\n"},
-		{"timeout on a demo", []string{"demo", "long-running", "--timeout", "5s"}, "demo long-running has a fixed length; --timeout does not apply\n"},
+		{"non-positive timeout on a demo", []string{"demo", "long-running", "--timeout", "0s"}, "invalid --timeout 0s: must be positive\n"},
 		{"unknown completion subcommand", []string{"completion", "bogus"}, "unknown command \"bogus\" for \"cli-app completion\"\n"},
 		{"extra argument to list", []string{"resource", "list", "extra"}, "unknown command \"extra\" for \"cli-app resource list\"\n"},
 		{"extra argument to completion shell", []string{"completion", "bash", "extra"}, "unknown command \"extra\" for \"cli-app completion bash\"\n"},

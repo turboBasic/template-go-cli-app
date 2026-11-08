@@ -969,7 +969,7 @@ func TestDemoCommands(t *testing.T) {
 		{name: "help topic", args: []string{"help", "demo", "long-running"}},
 		{name: "unknown subcommand", args: []string{"demo", "bogus"}, bad: true},
 		{name: "extra argument", args: []string{"demo", "long-running", "extra"}, bad: true},
-		{name: "timeout does not apply", args: []string{"demo", "long-running", "--timeout", "5s"}, bad: true},
+		{name: "non-positive timeout", args: []string{"demo", "long-running", "--timeout", "0s"}, bad: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			command := newTestRootCommand(t)
@@ -988,5 +988,24 @@ func TestDemoCommands(t *testing.T) {
 				t.Fatalf("Execute() error = %v, stdout %q; want help naming long-running", err, stdout.String())
 			}
 		})
+	}
+}
+
+func TestDemoLongRunningHonorsTimeout(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader := memory.NewResourceReader()
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter, app.WithLongRunningDuration(time.Minute)), nil, nil
+	}, testBuildInfo(), reader.Names())
+	command.SetArgs([]string{"demo", "long-running", "--timeout", "50ms"})
+	var stdout, stderr bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	started := time.Now()
+	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) {
+		t.Fatalf("Execute() error = %v, want a timeout error", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second || strings.Contains(stderr.String(), "complete:") {
+		t.Fatalf("took %s with stderr %q, want it to stop at the timeout without completing", elapsed, stderr.String())
 	}
 }
