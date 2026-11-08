@@ -32,16 +32,13 @@ var (
 func main() {
 	resources := memory.NewResourceReader()
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		statusRetries := func(reader app.ResourceReader) (app.ResourceReader, error) {
-			retrying, err := retry.NewResourceReader(reader, retry.Policy(effective.Retry.Demo.FlakyDependency), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
-			if err != nil {
-				return nil, fmt.Errorf("configure status retries: %w", err)
-			}
-			return retrying, nil
+		flaky, err := retry.NewStatusReader(memory.NewFlakyReader(app.FlakyFailures), retry.Policy(effective.Retry.Demo.FlakyDependency), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
+		if err != nil {
+			return nil, nil, fmt.Errorf("configure status retries: %w", err)
 		}
 		return app.NewResourceService(resources, logger, progressReporter,
 			app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Demo.SecretCredential.Reference),
-			app.WithStatusRetries(statusRetries)), nil, nil
+			app.WithFlakyDependency(flaky)), nil, nil
 	}, buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {

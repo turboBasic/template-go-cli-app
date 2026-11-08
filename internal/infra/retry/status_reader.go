@@ -8,10 +8,9 @@ import (
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
-var _ app.ResourceReader = (*ResourceReader)(nil)
+var _ app.StatusReader = (*StatusReader)(nil)
 
 // Policy bounds attempts and exponential backoff. The configuration layer validates it.
 type Policy struct {
@@ -52,45 +51,41 @@ type Random interface {
 	Float64() float64
 }
 
-// ResourceReader retries only read-only status lookups; List and Apply are never retried.
-type ResourceReader struct {
-	reader   app.ResourceReader
+// StatusReader retries read-only status lookups. It wraps only app.StatusReader, so a mutation cannot be
+// routed through it: retrying one automatically is unsafe unless the operation is idempotent.
+type StatusReader struct {
+	reader   app.StatusReader
 	policy   Policy
 	clock    Clock
 	random   Random
 	reporter app.ProgressReporter
 }
 
-// Option configures a ResourceReader.
-type Option func(*ResourceReader)
+// Option configures a StatusReader.
+type Option func(*StatusReader)
 
 // WithProgress reports each retry to reporter as an indeterminate "retrying" event.
 func WithProgress(reporter app.ProgressReporter) Option {
-	return func(r *ResourceReader) { r.reporter = reporter }
+	return func(r *StatusReader) { r.reporter = reporter }
 }
 
-// NewResourceReader wraps a resource reader with status retries under policy.
-func NewResourceReader(reader app.ResourceReader, policy Policy, clock Clock, random Random, options ...Option) (*ResourceReader, error) {
+// NewStatusReader wraps a status reader with retries under policy.
+func NewStatusReader(reader app.StatusReader, policy Policy, clock Clock, random Random, options ...Option) (*StatusReader, error) {
 	if reader == nil {
-		return nil, errors.New("resource reader is required")
+		return nil, errors.New("status reader is required")
 	}
 	if clock == nil || policy.Jitter > 0 && random == nil {
 		return nil, errors.New("status retries require a clock and jitter requires a random source")
 	}
-	r := &ResourceReader{reader: reader, policy: policy, clock: clock, random: random}
+	r := &StatusReader{reader: reader, policy: policy, clock: clock, random: random}
 	for _, option := range options {
 		option(r)
 	}
 	return r, nil
 }
 
-// List delegates without retrying the operation.
-func (r *ResourceReader) List(ctx context.Context) ([]domain.Resource, error) {
-	return r.reader.List(ctx)
-}
-
 // Status retries only unavailable errors because this operation is read-only.
-func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resource, error) {
+func (r *StatusReader) Status(ctx context.Context, name string) (domain.Resource, error) {
 	if r.policy.MaxAttempts <= 1 {
 		return r.reader.Status(ctx, name)
 	}
@@ -120,13 +115,8 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 	}
 }
 
-// Apply delegates without retrying the mutating operation.
-func (r *ResourceReader) Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error) {
-	return r.reader.Apply(ctx, name, credential)
-}
-
 // delay is the exponential backoff after attempt, jittered and never above MaxDelay.
-func (r *ResourceReader) delay(attempt int) time.Duration {
+func (r *StatusReader) delay(attempt int) time.Duration {
 	delay := r.policy.InitialDelay
 	for i := 1; i < attempt; i++ {
 		if delay > r.policy.MaxDelay/2 {

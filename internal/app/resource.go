@@ -91,8 +91,7 @@ type ResourceService struct {
 	resolver         SecretResolver
 	credentialRef    string
 	longRunning      time.Duration
-	flakyFailures    int
-	statusRetries    StatusRetries
+	flakyDependency  StatusReader
 }
 
 // ResourceOption configures optional behaviour of a ResourceService.
@@ -105,7 +104,7 @@ func WithCredential(resolver SecretResolver, reference string) ResourceOption {
 
 // NewResourceService constructs a resource service with its required dependencies.
 func NewResourceService(reader ResourceReader, logger *slog.Logger, progressReporter ProgressReporter, options ...ResourceOption) *ResourceService {
-	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter, longRunning: longRunningDuration, flakyFailures: FlakyFailures}
+	s := &ResourceService{reader: reader, logger: logger, progressReporter: progressReporter, longRunning: longRunningDuration}
 	for _, option := range options {
 		option(s)
 	}

@@ -8,12 +8,19 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 )
 
+type statusFunc func(context.Context, string) (domain.Resource, error)
+
+func (f statusFunc) Status(ctx context.Context, name string) (domain.Resource, error) {
+	return f(ctx, name)
+}
+
 func TestFlakyDependency(t *testing.T) {
 	want := domain.Resource{Name: "flaky-dependency", Status: "ready"}
+	ready := statusFunc(func(context.Context, string) (domain.Resource, error) { return want, nil })
 
-	t.Run("no failures succeeds without a wrapper", func(t *testing.T) {
+	t.Run("a ready dependency succeeds", func(t *testing.T) {
 		service := newTestResourceService(fakeResourceReader{})
-		WithFlakyFailures(0)(service)
+		WithFlakyDependency(ready)(service)
 		if got, err := service.FlakyDependency(context.Background()); err != nil || got != want {
 			t.Fatalf("FlakyDependency() = (%+v, %v), want %+v", got, err, want)
 		}
@@ -22,7 +29,7 @@ func TestFlakyDependency(t *testing.T) {
 	t.Run("success ends progress so a spinner left by a retry stops", func(t *testing.T) {
 		var events []ProgressEvent
 		service := newTestResourceService(fakeResourceReader{}, progressRecorder{events: &events})
-		WithFlakyFailures(0)(service)
+		WithFlakyDependency(ready)(service)
 		if _, err := service.FlakyDependency(context.Background()); err != nil {
 			t.Fatalf("FlakyDependency() error = %v", err)
 		}
@@ -31,40 +38,20 @@ func TestFlakyDependency(t *testing.T) {
 		}
 	})
 
-	t.Run("a failure without a wrapper is final", func(t *testing.T) {
+	t.Run("a dependency failure is returned", func(t *testing.T) {
 		service := newTestResourceService(fakeResourceReader{})
-		WithFlakyFailures(1)(service)
+		WithFlakyDependency(statusFunc(func(context.Context, string) (domain.Resource, error) {
+			return domain.Resource{}, Classify(ErrUnavailable, errors.New("down"))
+		}))(service)
 		if _, err := service.FlakyDependency(context.Background()); !errors.Is(err, ErrUnavailable) {
 			t.Fatalf("FlakyDependency() error = %v, want ErrUnavailable", err)
 		}
 	})
 
-	t.Run("a wrapper sees the default failures and then the resource", func(t *testing.T) {
-		var errs []error
+	t.Run("a missing dependency is a validation error", func(t *testing.T) {
 		service := newTestResourceService(fakeResourceReader{})
-		WithStatusRetries(func(reader ResourceReader) (ResourceReader, error) {
-			var got domain.Resource
-			for range FlakyFailures + 1 {
-				var err error
-				got, err = reader.Status(context.Background(), "ignored")
-				errs = append(errs, err)
-			}
-			return fakeResourceReader{resource: got}, nil
-		})(service)
-		if got, err := service.FlakyDependency(context.Background()); err != nil || got != want {
-			t.Fatalf("FlakyDependency() = (%+v, %v), want %+v", got, err, want)
-		}
-		if len(errs) != 3 || !errors.Is(errs[0], ErrUnavailable) || !errors.Is(errs[1], ErrUnavailable) || errs[2] != nil {
-			t.Fatalf("Status() errors = %v, want two ErrUnavailable then nil", errs)
-		}
-	})
-
-	t.Run("a wrapper that cannot be built fails the demo", func(t *testing.T) {
-		wantErr := errors.New("bad policy")
-		service := newTestResourceService(fakeResourceReader{})
-		WithStatusRetries(func(ResourceReader) (ResourceReader, error) { return nil, wantErr })(service)
-		if _, err := service.FlakyDependency(context.Background()); !errors.Is(err, wantErr) {
-			t.Fatalf("FlakyDependency() error = %v, want %v", err, wantErr)
+		if _, err := service.FlakyDependency(context.Background()); !errors.Is(err, ErrValidation) {
+			t.Fatalf("FlakyDependency() error = %v, want ErrValidation", err)
 		}
 	})
 
@@ -73,12 +60,12 @@ func TestFlakyDependency(t *testing.T) {
 		cancel()
 		called := false
 		service := newTestResourceService(fakeResourceReader{})
-		WithStatusRetries(func(reader ResourceReader) (ResourceReader, error) {
+		WithFlakyDependency(statusFunc(func(context.Context, string) (domain.Resource, error) {
 			called = true
-			return reader, nil
-		})(service)
+			return want, nil
+		}))(service)
 		if _, err := service.FlakyDependency(ctx); !errors.Is(err, context.Canceled) || called {
-			t.Fatalf("FlakyDependency() error = %v, wrapper called = %t, want cancellation and no call", err, called)
+			t.Fatalf("FlakyDependency() error = %v, dependency called = %t, want cancellation and no call", err, called)
 		}
 	})
 }
