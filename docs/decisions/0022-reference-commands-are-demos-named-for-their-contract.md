@@ -53,7 +53,7 @@ configured timeouts. Evidence is in #84.
 - An old key in a configuration file fails with an unknown-key error and exit 2. An old `CLI_APP_*` variable is
   ignored silently, because the loader skips a variable it does not know.
 - The internal names (`ResourceService`, the `memory` fixture) stay: the simulated domain is what the demos run on.
-- Reopen if an application built from the template needs a command outside `demo` to demonstrate a contract.
+- Reopen if the template must demonstrate a contract through a command that an application keeps.
 
 ## Links
 
