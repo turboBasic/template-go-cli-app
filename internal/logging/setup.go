@@ -16,12 +16,8 @@ type Result struct {
 	Close  func() error
 }
 
-// New constructs the stderr logger and optional JSON Lines file destination.
-func New(cfg config.LogConfig) (Result, error) {
-	return newWithWriters(cfg, os.Stderr)
-}
-
-func newWithWriters(cfg config.LogConfig, stderr io.Writer) (Result, error) {
+// New constructs the logger writing to stderr and an optional JSON Lines file destination.
+func New(cfg config.LogConfig, stderr io.Writer) (Result, error) {
 	consoleLevel, err := parseLevel(cfg.Level)
 	if err != nil {
 		return Result{}, fmt.Errorf("configure console logger: %w", err)

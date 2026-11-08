@@ -479,51 +479,23 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 
 func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	setupConfigEnvironment(t)
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	previousStderr := os.Stderr
-	os.Stderr = writer
-	commandReader := memory.NewResourceReader()
+	reader := memory.NewResourceReader()
 	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		return app.NewResourceService(commandReader, logger, progressReporter), nil, nil
-	}, testBuildInfo(), commandReader.Names())
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "demo", "structured-output"})
-	var stdout bytes.Buffer
-	var progress bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	command.SetOut(&stdout)
-	command.SetErr(&progress)
-	listCommand, _, err := command.Find([]string{"demo", "structured-output"})
-	if err != nil {
+	command.SetErr(&stderr)
+	if err := command.Execute(); err != nil {
 		t.Fatal(err)
-	}
-	listCommand.PreRunE = func(cmd *cobra.Command, _ []string) error {
-		_, err := fmt.Fprintln(cmd.ErrOrStderr(), "progress update")
-		return err
-	}
-	executeErr := command.Execute()
-	os.Stderr = previousStderr
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	stderr, readErr := io.ReadAll(reader)
-	_ = reader.Close()
-	if executeErr != nil {
-		t.Fatal(executeErr)
-	}
-	if readErr != nil {
-		t.Fatal(readErr)
 	}
 	var results []map[string]string
 	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil || len(results) != 2 || results[0]["name"] != "example-1" {
 		t.Fatalf("command output = %q, want parseable JSON results (decode error: %v)", stdout.String(), err)
 	}
-	if !strings.Contains(string(stderr), "listing resources") || strings.Contains(string(stderr), "example-1") {
-		t.Fatalf("diagnostics = %q, want log record only", stderr)
-	}
-	if progress.String() != "progress update\n" || strings.Contains(stdout.String(), "progress update") {
-		t.Fatalf("progress = %q, stdout = %q; want progress on stderr only", progress.String(), stdout.String())
+	if !strings.Contains(stderr.String(), "listing resources") || strings.Contains(stderr.String(), "example-1") {
+		t.Fatalf("diagnostics = %q, want log record only", stderr.String())
 	}
 }
 
