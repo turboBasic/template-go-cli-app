@@ -18,9 +18,6 @@ import (
 
 const configID = "cli-app"
 
-// ownTimeout marks a demo with no timeouts.demo key that applies --timeout itself.
-const ownTimeout = "own-timeout"
-
 // ResourceFactory builds the command's application service and its dependency cleanup.
 type ResourceFactory func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
 
@@ -135,12 +132,8 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
-		if name := demoTimeoutName(cmd); name != "" && cmd.Annotations[ownTimeout] == "" && flags.Lookup("timeout").Changed {
-			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
-		}
-		if flag := cmd.Flags().Lookup("max-attempts"); flag != nil && flag.Changed {
-			attempts, _ := cmd.Flags().GetInt("max-attempts")
-			flagValues["retry.demo.flaky_dependency.max_attempts"] = config.FlagValue{Value: attempts, Changed: true, Source: "--max-attempts"}
+		for key, value := range demoFlagValues(cmd, flags.Lookup("timeout").Changed, timeoutOverride) {
+			flagValues[key] = value
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
@@ -227,27 +220,6 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 		return nil
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
-}
-
-// demoTimeoutName is the last element of a demo command's timeouts.demo.<name> key, or "" outside the group.
-func demoTimeoutName(cmd *cobra.Command) string {
-	if cmd.Parent() == nil || cmd.Parent().Name() != "demo" {
-		return ""
-	}
-	return strings.ReplaceAll(cmd.Name(), "-", "_")
-}
-
-func demoOperationTimeout(cmd *cobra.Command, timeouts config.DemoTimeouts) *time.Duration {
-	switch demoTimeoutName(cmd) {
-	case "structured_output":
-		return timeouts.StructuredOutput
-	case "not_found":
-		return timeouts.NotFound
-	case "secret_credential":
-		return timeouts.SecretCredential
-	default:
-		return nil
-	}
 }
 
 func closeAfterRun(command *cobra.Command, cleanup func(context.Context) error) {
@@ -372,22 +344,6 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 		},
 	})
 	return demo
-}
-
-// flagTimeoutContext applies --timeout to a demo that has no timeouts.demo key of its own: a positive
-// duration bounds the command's context, a non-positive one is a validation error, and an unset flag
-// leaves the context as it is. The caller always defers the returned cancel.
-func flagTimeoutContext(cmd *cobra.Command) (context.Context, context.CancelFunc, error) {
-	ctx := cmd.Context()
-	if !cmd.Flags().Changed("timeout") {
-		return ctx, func() {}, nil
-	}
-	timeout, err := cmd.Flags().GetDuration("timeout")
-	if err != nil || timeout <= 0 {
-		return nil, nil, app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeout))
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	return ctx, cancel, nil
 }
 
 func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
