@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"charm.land/fang/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -54,10 +53,8 @@ func withCause(ctx context.Context, err error) error {
 // reportError prints the plain Stage 1 line unless the writer supports color (Fang hands the
 // handler a colorprofile.Writer, so redirection and TERM=dumb land on the plain branch);
 // otherwise it renders Fang's styled block plus a usage hint for validation errors.
-// colorprofile.Env is consulted too because the writer's own detection lets CLICOLOR_FORCE
-// override NO_COLOR on a non-TTY, while Env gives NO_COLOR precedence.
 func reportError(w io.Writer, styles fang.Styles, err error) {
-	if cw, ok := w.(*colorprofile.Writer); !ok || min(cw.Profile, colorprofile.Env(os.Environ())) <= colorprofile.ASCII {
+	if cw, ok := w.(*colorprofile.Writer); !ok || cw.Profile <= colorprofile.ASCII {
 		_, _ = fmt.Fprintln(w, err)
 		return
 	}

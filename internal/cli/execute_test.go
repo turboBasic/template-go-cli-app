@@ -159,9 +159,8 @@ func runFailing(t *testing.T, failure error) (string, error) {
 func TestErrorHandlerPlainWhenColorIsOff(t *testing.T) {
 	failure := app.Classify(app.ErrValidation, errors.New("bad input"))
 	for name, env := range map[string]map[string]string{
-		"redirected":           {"TERM": "xterm-256color"},
-		"forced then NO_COLOR": {"TERM": "xterm-256color", "CLICOLOR_FORCE": "1", "NO_COLOR": "1"},
-		"TERM=dumb":            {"TERM": "dumb"},
+		"redirected": {"TERM": "xterm-256color"},
+		"TERM=dumb":  {"TERM": "dumb"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			for _, key := range []string{"TERM", "CLICOLOR_FORCE", "NO_COLOR"} {
@@ -181,7 +180,7 @@ func TestErrorHandlerPlainWhenColorIsOff(t *testing.T) {
 func TestErrorHandlerStyledWhenColorIsForced(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("CLICOLOR_FORCE", "1")
-	t.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "1") // like Fang's help and gh, forcing wins
 
 	stderr, _ := runFailing(t, app.Classify(app.ErrValidation, errors.New("bad input")))
 	plain := ansiSequence.ReplaceAllString(stderr, "")
