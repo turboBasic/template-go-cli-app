@@ -88,14 +88,14 @@ func environmentKey(name string) string {
 		return "timeouts.demo.not_found"
 	case "CLI_APP_TIMEOUTS_DEMO_SECRET_CREDENTIAL":
 		return "timeouts.demo.secret_credential"
-	case "CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_ATTEMPTS":
-		return "retry.demo.not_found.max_attempts"
-	case "CLI_APP_RETRY_DEMO_NOT_FOUND_INITIAL_DELAY":
-		return "retry.demo.not_found.initial_delay"
-	case "CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_DELAY":
-		return "retry.demo.not_found.max_delay"
-	case "CLI_APP_RETRY_DEMO_NOT_FOUND_JITTER":
-		return "retry.demo.not_found.jitter"
+	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_ATTEMPTS":
+		return "retry.demo.flaky_dependency.max_attempts"
+	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_INITIAL_DELAY":
+		return "retry.demo.flaky_dependency.initial_delay"
+	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_DELAY":
+		return "retry.demo.flaky_dependency.max_delay"
+	case "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER":
+		return "retry.demo.flaky_dependency.jitter"
 	case "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE":
 		return "demo.secret_credential.reference"
 	default:

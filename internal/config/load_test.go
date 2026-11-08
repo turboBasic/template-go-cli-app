@@ -84,7 +84,7 @@ func TestMergeLayerRecursivelyAndReplacesArrays(t *testing.T) {
 func TestEveryEffectiveLeafHasASource(t *testing.T) {
 	root := t.TempDir()
 	userPath := filepath.Join(root, "user.toml")
-	data := "[timeouts.demo]\nstructured_output = '3s'\n[retry.demo.not_found]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '2s'\njitter = 0.5\n"
+	data := "[timeouts.demo]\nstructured_output = '3s'\n[retry.demo.flaky_dependency]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '2s'\njitter = 0.5\n"
 	if err := os.WriteFile(userPath, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -99,8 +99,8 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 	if got.Config.Timeouts.Cleanup != 5*time.Second {
 		t.Errorf("Timeouts.Cleanup = %s, want 5s", got.Config.Timeouts.Cleanup)
 	}
-	if got.Sources["timeouts.demo.structured_output"] != Source(userPath) || got.Sources["retry.demo.not_found.max_attempts"] != Source(userPath) {
-		t.Errorf("user-file sources = %q, %q, want %q", got.Sources["timeouts.demo.structured_output"], got.Sources["retry.demo.not_found.max_attempts"], userPath)
+	if got.Sources["timeouts.demo.structured_output"] != Source(userPath) || got.Sources["retry.demo.flaky_dependency.max_attempts"] != Source(userPath) {
+		t.Errorf("user-file sources = %q, %q, want %q", got.Sources["timeouts.demo.structured_output"], got.Sources["retry.demo.flaky_dependency.max_attempts"], userPath)
 	}
 	for _, leaf := range leaves(got.values) {
 		if got.Sources[leaf.key] == "" {

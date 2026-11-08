@@ -91,8 +91,8 @@ func decodeConfig(values map[string]any) (Config, error) {
 		"timeouts.demo.structured_output",
 		"timeouts.demo.not_found",
 		"timeouts.demo.secret_credential",
-		"retry.demo.not_found.initial_delay",
-		"retry.demo.not_found.max_delay",
+		"retry.demo.flaky_dependency.initial_delay",
+		"retry.demo.flaky_dependency.max_delay",
 	} {
 		if err := decodeDuration(values, key); err != nil {
 			return Config{}, err

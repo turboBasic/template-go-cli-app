@@ -26,8 +26,8 @@ func TestDecodeTOML(t *testing.T) {
 		},
 		{
 			name: "valid status retry policy",
-			data: "[retry.demo.not_found]\nmax_attempts = 3\ninitial_delay = '100ms'\nmax_delay = '1s'\njitter = 0.25\n",
-			want: Config{Log: LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}}, Output: "text", Color: "auto", Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: RetryConfig{Demo: DemoRetryConfig{NotFound: &RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 100 * time.Millisecond, MaxDelay: time.Second, Jitter: 0.25}}}},
+			data: "[retry.demo.flaky_dependency]\nmax_attempts = 3\ninitial_delay = '100ms'\nmax_delay = '1s'\njitter = 0.25\n",
+			want: Config{Log: LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}}, Output: "text", Color: "auto", Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: RetryConfig{Demo: DemoRetryConfig{FlakyDependency: &RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 100 * time.Millisecond, MaxDelay: time.Second, Jitter: 0.25}}}},
 		},
 		{name: "malformed TOML", data: "log-level = [", wantIn: "settings.toml"},
 		{name: "unknown key", data: "log-levels = 'warn'\n", wantIn: `unknown key "log-levels"`},
@@ -48,10 +48,10 @@ func TestDecodeTOML(t *testing.T) {
 		{name: "zero operation duration", data: "[timeouts.demo]\nstructured_output = '0s'\n", wantIn: "must be positive"},
 		{name: "negative operation duration", data: "[timeouts.demo]\nsecret_credential = '-1s'\n", wantIn: "must be positive"},
 		{name: "zero cleanup duration", data: "[timeouts]\ncleanup = '0s'\n", wantIn: "must be positive"},
-		{name: "retry policy missing bounds", data: "[retry.demo.not_found]\nmax_attempts = 3\n", wantIn: "retry.demo.not_found delays"},
-		{name: "retry policy max delay below initial", data: "[retry.demo.not_found]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '1ms'\n", wantIn: "retry.demo.not_found delays"},
-		{name: "retry policy invalid attempts", data: "[retry.demo.not_found]\nmax_attempts = 0\n", wantIn: "max_attempts"},
-		{name: "retry policy invalid jitter", data: "[retry.demo.not_found]\nmax_attempts = 2\ninitial_delay = '1ms'\nmax_delay = '1s'\njitter = 1.5\n", wantIn: "jitter"},
+		{name: "retry policy missing bounds", data: "[retry.demo.flaky_dependency]\nmax_attempts = 3\n", wantIn: "retry.demo.flaky_dependency delays"},
+		{name: "retry policy max delay below initial", data: "[retry.demo.flaky_dependency]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '1ms'\n", wantIn: "retry.demo.flaky_dependency delays"},
+		{name: "retry policy invalid attempts", data: "[retry.demo.flaky_dependency]\nmax_attempts = 0\n", wantIn: "max_attempts"},
+		{name: "retry policy invalid jitter", data: "[retry.demo.flaky_dependency]\nmax_attempts = 2\ninitial_delay = '1ms'\nmax_delay = '1s'\njitter = 1.5\n", wantIn: "jitter"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
