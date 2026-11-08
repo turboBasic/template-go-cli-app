@@ -49,6 +49,7 @@ func TestDecodeTOML(t *testing.T) {
 		{name: "negative operation duration", data: "[timeouts.resource]\napply = '-1s'\n", wantIn: "must be positive"},
 		{name: "zero cleanup duration", data: "[timeouts]\ncleanup = '0s'\n", wantIn: "must be positive"},
 		{name: "retry policy missing bounds", data: "[retry.resource.status]\nmax_attempts = 3\n", wantIn: "retry.resource.status delays"},
+		{name: "retry policy max delay below initial", data: "[retry.resource.status]\nmax_attempts = 2\ninitial_delay = '1s'\nmax_delay = '1ms'\n", wantIn: "retry.resource.status delays"},
 		{name: "retry policy invalid attempts", data: "[retry.resource.status]\nmax_attempts = 0\n", wantIn: "max_attempts"},
 		{name: "retry policy invalid jitter", data: "[retry.resource.status]\nmax_attempts = 2\ninitial_delay = '1ms'\nmax_delay = '1s'\njitter = 1.5\n", wantIn: "jitter"},
 	}
