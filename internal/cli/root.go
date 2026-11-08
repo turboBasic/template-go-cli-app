@@ -133,7 +133,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
 		if name := demoTimeoutName(cmd); name != "" && flags.Lookup("timeout").Changed {
-			// A demo without a schema key, long-running, is skipped here and applies --timeout itself.
+			// long-running has no schema key, so the loader drops this overlay; it applies --timeout itself.
 			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		loaded, err := config.Load(files, flagValues)
