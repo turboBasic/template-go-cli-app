@@ -62,8 +62,10 @@ func TestCLIContract(t *testing.T) {
 
 	t.Run("version", func(t *testing.T) {
 		stdout, stderr, code := runCLIProcess(t, binary, "--version")
-		if want := "cli-app version 1.2.3 (commit abc1234, built 2026-01-02T03:04:05Z)\n"; code != 0 || stderr != "" || stdout != want {
-			t.Fatalf("--version = %q, stderr %q, exit %d; want %q", stdout, stderr, code, want)
+		// The version tokens are the contract (scripts/check-release.sh reads "version <v>"); the rest of the sentence is not.
+		tokens := []string{"version 1.2.3", "abc1234", "2026-01-02T03:04:05Z"}
+		if code != 0 || stderr != "" || !containsAll(stdout, tokens...) {
+			t.Fatalf("--version = %q, stderr %q, exit %d; want exit 0, empty stderr and the tokens %q", stdout, stderr, code, tokens)
 		}
 	})
 

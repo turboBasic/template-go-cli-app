@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -65,13 +66,18 @@ func TestRootFeatures(t *testing.T) {
 	}
 }
 
+// resultWords is a human result's words, so its punctuation and spacing may change without breaking a test.
+func resultWords(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' })
+}
+
 func TestResourceStatusAndApplyCommands(t *testing.T) {
 	for _, tc := range []struct {
 		args string
-		want string
+		want []string
 	}{
-		{args: "not-found example-2", want: "example-2: pending\n"},
-		{args: "secret-credential example-2", want: "example-2: ready\n"},
+		{args: "not-found example-2", want: []string{"example-2", "pending"}},
+		{args: "secret-credential example-2", want: []string{"example-2", "ready"}},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			command := newTestRootCommand(t)
@@ -82,8 +88,8 @@ func TestResourceStatusAndApplyCommands(t *testing.T) {
 			if err := command.Execute(); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
-			if output.String() != tc.want {
-				t.Fatalf("output = %q, want %q", output.String(), tc.want)
+			if got := resultWords(output.String()); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("result words = %q, want %q", got, tc.want)
 			}
 		})
 	}

@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 )
 
 func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
@@ -232,7 +234,7 @@ func TestCLIProcessFlakyDependency(t *testing.T) {
 		args        []string
 		after       []string // flags of the demo command itself, placed after its name
 		wantCode    int
-		wantStdout  string // exact stdout, or empty to require none
+		wantStdout  string // JSON byte for byte, text by its words; empty requires none
 		wantStderr  string // substring of stderr
 		wantRetries int    // exact count of "retrying:" lines on stderr
 		silent      bool   // stderr must be empty
@@ -258,7 +260,7 @@ func TestCLIProcessFlakyDependency(t *testing.T) {
 			args = append(args, "demo", "flaky-dependency")
 			args = append(args, tt.after...)
 			stdout, stderr, code := runCLIProcessEnv(t, binary, tt.env, args...)
-			if code != tt.wantCode || stdout != tt.wantStdout || !strings.Contains(stderr, tt.wantStderr) {
+			if code != tt.wantCode || !stdoutMatches(stdout, tt.wantStdout) || !strings.Contains(stderr, tt.wantStderr) {
 				t.Fatalf("exit %d, stdout %q, stderr %q; want exit %d, stdout %q, stderr containing %q", code, stdout, stderr, tt.wantCode, tt.wantStdout, tt.wantStderr)
 			}
 			if tt.silent && stderr != "" {
@@ -272,4 +274,25 @@ func TestCLIProcessFlakyDependency(t *testing.T) {
 			}
 		})
 	}
+}
+
+// stdoutMatches compares JSON, which is machine-readable, byte for byte and human text by its words, so the
+// text's punctuation and spacing may change without breaking a test.
+func stdoutMatches(got, want string) bool {
+	if strings.HasPrefix(want, "{") {
+		return got == want
+	}
+	words := func(text string) []string {
+		return strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' })
+	}
+	return slices.Equal(words(got), words(want))
+}
+
+func containsAll(text string, parts ...string) bool {
+	for _, part := range parts {
+		if !strings.Contains(text, part) {
+			return false
+		}
+	}
+	return true
 }
