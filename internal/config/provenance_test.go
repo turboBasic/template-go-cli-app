@@ -37,8 +37,12 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 	if got := entries["timeouts.cleanup"].Value; got != "5s" {
 		t.Errorf("timeouts.cleanup value = %#v, want \"5s\"", got)
 	}
-	if _, ok := entries["timeouts.demo.structured_output"]; ok {
-		t.Error("unset timeouts.demo.structured_output has an entry")
+	if got, ok := entries["timeouts.demo.structured_output"]; !ok || got.Value != nil || got.Source != KindDefault {
+		t.Errorf("timeouts.demo.structured_output = %+v, want an unset default entry", got)
+	}
+	jitter := entries["retry.demo.flaky_dependency.jitter"]
+	if jitter.Value != 0.0 || jitter.Source != KindDefault {
+		t.Errorf("default jitter = (%#v, %q), want (0, default)", jitter.Value, jitter.Source)
 	}
 }
 
@@ -55,4 +59,22 @@ func TestEntriesUnsourcedLeafIsUnknown(t *testing.T) {
 	if len(got) != 1 || got[0].Source != KindUnknown {
 		t.Errorf("Entries() = %+v, want one unknown entry", got)
 	}
+}
+
+func TestEntriesReportJitterOverrideWithItsSource(t *testing.T) {
+	root := t.TempDir()
+	result, err := loadWithSchema(ConfigFiles{}, []string{"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.2"}, nil, productionSchema(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range result.Entries() {
+		if entry.Key != "retry.demo.flaky_dependency.jitter" {
+			continue
+		}
+		if entry.Value != 0.2 || entry.Source != KindEnvironment || entry.Origin != "CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER" {
+			t.Errorf("jitter = %+v, want 0.2 from the environment", entry)
+		}
+		return
+	}
+	t.Error("no entry for retry.demo.flaky_dependency.jitter")
 }

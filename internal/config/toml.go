@@ -128,6 +128,9 @@ func decodeDuration(values map[string]any, key string) error {
 	if !ok {
 		return nil
 	}
+	if value == nil {
+		return nil
+	}
 	if _, ok := value.(time.Duration); ok {
 		return nil
 	}

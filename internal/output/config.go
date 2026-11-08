@@ -36,8 +36,11 @@ func (r Renderer) RenderConfig(entries []config.Entry) error {
 	}
 	for _, entry := range entries {
 		value := fmt.Sprintf("%v", entry.Value)
-		if text, ok := entry.Value.(string); ok {
-			value = fmt.Sprintf("%q", text)
+		switch typed := entry.Value.(type) {
+		case nil:
+			value = "none"
+		case string:
+			value = fmt.Sprintf("%q", typed)
 		}
 		source := string(entry.Source)
 		if entry.Origin != "" {

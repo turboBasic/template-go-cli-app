@@ -80,3 +80,20 @@ func TestRenderConfigJSONKeepsDurationsAsStrings(t *testing.T) {
 		t.Errorf("value = %#v, want the string \"5s\"", items[0]["value"])
 	}
 }
+
+func TestRenderConfigUnsetValue(t *testing.T) {
+	entries := []config.Entry{{Key: "timeouts.demo.not_found", Source: config.KindDefault}}
+	var text, js bytes.Buffer
+	if err := (Renderer{Writer: &text, Options: Options{Format: FormatText}}).RenderConfig(entries); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "timeouts.demo.not_found  none   default") {
+		t.Errorf("text = %q, want the value rendered as none", text.String())
+	}
+	if err := (Renderer{Writer: &js, Options: Options{Format: FormatJSON}}).RenderConfig(entries); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(js.String(), `"value":null`) {
+		t.Errorf("json = %q, want a null value", js.String())
+	}
+}
