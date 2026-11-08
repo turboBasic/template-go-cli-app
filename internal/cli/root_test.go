@@ -1017,7 +1017,34 @@ func TestDemoCommandsAreDemonstrations(t *testing.T) {
 		}
 	}
 	slices.Sort(got)
-	if want := []string{"long-running", "not-found", "secret-credential", "structured-output"}; !slices.Equal(got, want) {
+	if want := []string{"flaky-dependency", "long-running", "not-found", "secret-credential", "structured-output"}; !slices.Equal(got, want) {
 		t.Errorf("demo subcommands = %v, want %v", got, want)
+	}
+}
+
+func TestFlakyDependencyCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr error
+	}{
+		{name: "the first failure is final without a retry policy", args: []string{"demo", "flaky-dependency"}, wantErr: app.ErrUnavailable},
+		{name: "a non-positive timeout is a validation error", args: []string{"demo", "flaky-dependency", "--timeout", "0s"}, wantErr: app.ErrValidation},
+		{name: "the timeout bounds the demo", args: []string{"demo", "flaky-dependency", "--timeout", "1ns"}, wantErr: app.ErrTimeout},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			reader := memory.NewResourceReader()
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				return app.NewResourceService(reader, logger, progressReporter), nil, nil
+			}, testBuildInfo(), reader.Names())
+			command.SetArgs(test.args)
+			command.SetOut(io.Discard)
+			command.SetErr(io.Discard)
+			if err := command.Execute(); !errors.Is(err, test.wantErr) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.wantErr)
+			}
+		})
 	}
 }

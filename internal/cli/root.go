@@ -346,7 +346,7 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 			"They are not part of an application built from the template: delete this group, and the code it calls.",
 	}
 	rejectUnknownSubcommands(demo)
-	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names))
+	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names), newDemoFlakyDependencyCommand(getResources, getRenderer))
 	demo.AddCommand(&cobra.Command{
 		Use:   "long-running",
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
@@ -355,20 +355,56 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 			"silence. The length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			if cmd.Flags().Changed("timeout") {
-				timeout, err := cmd.Flags().GetDuration("timeout")
-				if err != nil || timeout <= 0 {
-					return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeout))
-				}
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, timeout)
-				defer cancel()
+			ctx, cancel, err := flagTimeoutContext(cmd)
+			if err != nil {
+				return err
 			}
+			defer cancel()
 			return getResources().LongRunning(ctx)
 		},
 	})
 	return demo
+}
+
+// flagTimeoutContext applies --timeout to a demo that has no timeouts.demo key of its own: a positive
+// duration bounds the command's context, a non-positive one is a validation error, and an unset flag
+// leaves the context as it is. The caller always defers the returned cancel.
+func flagTimeoutContext(cmd *cobra.Command) (context.Context, context.CancelFunc, error) {
+	ctx := cmd.Context()
+	if !cmd.Flags().Changed("timeout") {
+		return ctx, func() {}, nil
+	}
+	timeout, err := cmd.Flags().GetDuration("timeout")
+	if err != nil || timeout <= 0 {
+		return nil, nil, app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeout))
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	return ctx, cancel, nil
+}
+
+func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
+	return &cobra.Command{
+		Use:   "flaky-dependency",
+		Short: "Demonstrate retries of a read-only dependency that fails transiently",
+		Long: "Demonstrates the retry contract: the dependency this command reads fails twice with an unavailable error, then\n" +
+			"succeeds. Without a policy the first failure is final: exit 1. Turn retries on with\n" +
+			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay} or the matching\n" +
+			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables, for example max_attempts 3 with initial_delay 100ms and\n" +
+			"max_delay 1s: each retry shows as a line on stderr and the command then succeeds. --timeout bounds the retries.",
+		Args: validationArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, cancel, err := flagTimeoutContext(cmd)
+			if err != nil {
+				return err
+			}
+			defer cancel()
+			resource, err := getResources().FlakyDependency(ctx)
+			if err != nil {
+				return err
+			}
+			return getRenderer().RenderResource(resource)
+		},
+	}
 }
 
 func completeResourceNames(names []string) cobra.CompletionFunc {
