@@ -770,6 +770,42 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	}
 }
 
+func TestConfigShowSkipsLoggingAndFactory(t *testing.T) {
+	setupConfigEnvironment(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cli.toml")
+	if err := os.WriteFile(path, []byte("[log.file]\npath = 'app.jsonl'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		want error
+	}{
+		{"succeeds", []string{"--config", path, "config", "show"}, nil},
+		{"invalid log level", []string{"--config", path, "--log-level", "nope", "config", "show"}, app.ErrValidation},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			factoryCalls := 0
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				factoryCalls++
+				return nil, nil, errors.New("factory must not run")
+			}, testBuildInfo(), nil)
+			command.SetArgs(test.args)
+			command.SetOut(&bytes.Buffer{})
+			if err := command.Execute(); !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.want)
+			}
+			if factoryCalls != 0 {
+				t.Fatalf("factory calls = %d, want zero", factoryCalls)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "app.jsonl")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("log file stat error = %v, want not exist", err)
+			}
+		})
+	}
+}
+
 func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	setupConfigEnvironment(t)
 	if err := os.Unsetenv("CLI_APP_LOG_LEVEL"); err != nil {
