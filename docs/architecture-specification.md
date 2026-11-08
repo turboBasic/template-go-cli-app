@@ -92,7 +92,7 @@ Configuration locations and discovery:
 - Maps merge recursively; arrays are replaced.
 - File-path-typed values from TOML resolve relative to the file that declares them. Values from flags or environment resolve relative to the working directory.
 
-The loader retains the source metadata needed for path resolution. Where per-leaf provenance is exposed through `config show` and `config explain`, inspection reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
+The loader retains the source metadata needed for path resolution. `config show [key]` is the single inspection command: it reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
 
 ## 6. CLI and output contract
 
