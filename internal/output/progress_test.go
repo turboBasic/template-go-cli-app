@@ -183,6 +183,17 @@ func TestAnimatedProgressReporterRestoresTheTerminal(t *testing.T) {
 		}
 	})
 
+	t.Run("progress after an early completion prints a line instead of starting a spinner", func(t *testing.T) {
+		var out bytes.Buffer
+		reporter := NewStyledProgressReporter(&out, true)
+		reporter.Report(app.ProgressEvent{Phase: "complete", Current: 1, Total: 1, Message: "Resource applied"})
+		reporter.Report(applying)
+		within(t, reporter.Close)
+		if got := stripANSI(out.String()); got != "✓ Resource applied (1/1)\napplying Applying resource\n" || strings.Contains(out.String(), hideCursor) {
+			t.Fatalf("output = %q, want the completion line then a plain styled line and no terminal control", out.String())
+		}
+	})
+
 	t.Run("a completion event alone never starts the spinner", func(t *testing.T) {
 		var out bytes.Buffer
 		reporter := NewStyledProgressReporter(&out, true)

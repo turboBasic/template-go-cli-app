@@ -102,13 +102,13 @@ func (r *StyledProgressReporter) Close() {
 }
 
 func (r *StyledProgressReporter) stopProgram() {
+	r.animate = false
 	if r.program == nil {
 		return
 	}
 	r.program.Send(stopMsg{})
 	<-r.done
 	r.program = nil
-	r.animate = false
 }
 
 type labelMsg struct{ phase, detail string }
