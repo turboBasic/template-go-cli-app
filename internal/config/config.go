@@ -36,7 +36,7 @@ type RetryConfig struct {
 
 // DemoRetryConfig holds retry policies for the reference demo commands.
 type DemoRetryConfig struct {
-	FlakyDependency *RetryPolicyConfig `koanf:"flaky_dependency"`
+	FlakyDependency RetryPolicyConfig `koanf:"flaky_dependency"`
 }
 
 // RetryPolicyConfig is a bounded retry policy for one configured operation.
@@ -80,6 +80,8 @@ func Defaults() Config {
 		Output:   "text",
 		Color:    "auto",
 		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
+		// The demo retries by default so it succeeds out of the box; a run takes about 9s with the spinner visible.
+		Retry: RetryConfig{Demo: DemoRetryConfig{FlakyDependency: RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 3 * time.Second, MaxDelay: 10 * time.Second}}},
 	}
 }
 
@@ -112,7 +114,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid %s %s: must be positive", setting.key, *setting.timeout)
 		}
 	}
-	if c.Retry.Demo.FlakyDependency != nil {
+	{
 		policy := c.Retry.Demo.FlakyDependency
 		if policy.MaxAttempts < 1 {
 			return fmt.Errorf("invalid retry.demo.flaky_dependency.max_attempts: must be positive")

@@ -136,6 +136,10 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			// long-running has no schema key, so the loader drops this overlay; it applies --timeout itself.
 			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
+		if flag := cmd.Flags().Lookup("max-attempts"); flag != nil && flag.Changed {
+			attempts, _ := cmd.Flags().GetInt("max-attempts")
+			flagValues["retry.demo.flaky_dependency.max_attempts"] = config.FlagValue{Value: attempts, Changed: true, Source: "--max-attempts"}
+		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
@@ -351,8 +355,8 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 		Use:   "long-running",
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
 		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
-			"color-capable terminal shows a bar that fills. Redirected stderr, --output json and --quiet keep plain lines or\n" +
-			"silence. The length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
+			"color-capable terminal shows a bar that fills. Redirected stderr keeps plain lines and --quiet silences them. The\n" +
+			"length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel, err := flagTimeoutContext(cmd)
@@ -383,14 +387,17 @@ func flagTimeoutContext(cmd *cobra.Command) (context.Context, context.CancelFunc
 }
 
 func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
-	return &cobra.Command{
+	defaultPolicy := config.Defaults().Retry.Demo.FlakyDependency
+	command := &cobra.Command{
 		Use:   "flaky-dependency",
 		Short: "Demonstrate retries of a read-only dependency that fails transiently",
-		Long: "Demonstrates the retry contract: the dependency this command reads fails twice with an unavailable error, then\n" +
-			"succeeds. Without a policy the first failure is final: exit 1. Turn retries on with\n" +
-			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay} or the matching\n" +
-			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables, for example max_attempts 3 with initial_delay 100ms and\n" +
-			"max_delay 1s: each retry shows as a line on stderr and the command then succeeds. --timeout bounds the retries.",
+		Long: fmt.Sprintf("Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
+			"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
+			"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+
+			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay} or the matching\n"+
+			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables. --max-attempts overrides max_attempts for one run, and %d or\n"+
+			"fewer shows the failure. --timeout bounds the retries.",
+			app.FlakyFailures, defaultPolicy.MaxAttempts, defaultPolicy.InitialDelay, defaultPolicy.MaxDelay, app.FlakyFailures),
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel, err := flagTimeoutContext(cmd)
@@ -405,6 +412,8 @@ func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, get
 			return getRenderer().RenderResource(resource)
 		},
 	}
+	command.Flags().Int("max-attempts", 0, "override retry.demo.flaky_dependency.max_attempts")
+	return command
 }
 
 func completeResourceNames(names []string) cobra.CompletionFunc {

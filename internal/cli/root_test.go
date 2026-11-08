@@ -284,6 +284,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Color:    "never",
 		Quiet:    true,
 		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Demo: config.DemoTimeouts{StructuredOutput: durationPointer(2 * time.Minute)}},
+		Retry:    config.Defaults().Retry,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
@@ -563,7 +564,7 @@ func TestApplyProgressColor(t *testing.T) {
 	}{
 		{name: "redirected default", mode: "plain"},
 		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "json with always styles stderr progress", args: []string{"--output", "json", "--color", "always"}, mode: "styled"},
 		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
 		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
@@ -920,7 +921,7 @@ func TestDemoLongRunningProgress(t *testing.T) {
 	}{
 		{name: "redirected default", mode: "plain"},
 		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "json with always styles stderr progress", args: []string{"--output", "json", "--color", "always"}, mode: "styled"},
 		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
 		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
@@ -1022,13 +1023,32 @@ func TestDemoCommandsAreDemonstrations(t *testing.T) {
 	}
 }
 
+func TestFlakyDependencyHelpStatesTheDefaults(t *testing.T) {
+	reader := memory.NewResourceReader()
+	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+	demo, _, err := command.Find([]string{"demo", "flaky-dependency"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := config.Defaults().Retry.Demo.FlakyDependency
+	for _, want := range []string{
+		fmt.Sprintf("fails %d times", app.FlakyFailures),
+		fmt.Sprintf("allows %d attempts, waits %s", policy.MaxAttempts, policy.InitialDelay),
+		fmt.Sprintf("up to %s", policy.MaxDelay),
+	} {
+		if !strings.Contains(demo.Long, want) {
+			t.Errorf("Long = %q, want it to contain %q", demo.Long, want)
+		}
+	}
+}
+
 func TestFlakyDependencyCommand(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
 		wantErr error
 	}{
-		{name: "the first failure is final without a retry policy", args: []string{"demo", "flaky-dependency"}, wantErr: app.ErrUnavailable},
+		{name: "the first failure is final without a retry wrapper", args: []string{"demo", "flaky-dependency"}, wantErr: app.ErrUnavailable},
 		{name: "a non-positive timeout is a validation error", args: []string{"demo", "flaky-dependency", "--timeout", "0s"}, wantErr: app.ErrValidation},
 		{name: "the timeout bounds the demo", args: []string{"demo", "flaky-dependency", "--timeout", "1ns"}, wantErr: app.ErrTimeout},
 	}

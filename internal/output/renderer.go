@@ -70,9 +70,10 @@ type Options struct {
 }
 
 // ProgressColorEnabled reports whether progress may use ANSI styling; progress goes to stderr, so
-// the automatic mode follows stderr where results follow stdout.
+// the automatic mode follows stderr where results follow stdout. The result format does not apply: JSON
+// constrains stdout, and progress never reaches it.
 func (o Options) ProgressColorEnabled() bool {
-	return ColorEnabled(o.Format, o.Color, o.Terminals.Stderr, o.NoColor)
+	return ColorEnabled(FormatText, o.Color, o.Terminals.Stderr, o.NoColor)
 }
 
 // Renderer writes resource results in the selected format.

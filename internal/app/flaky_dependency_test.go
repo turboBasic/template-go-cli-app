@@ -19,6 +19,18 @@ func TestFlakyDependency(t *testing.T) {
 		}
 	})
 
+	t.Run("success ends progress so a spinner left by a retry stops", func(t *testing.T) {
+		var events []ProgressEvent
+		service := newTestResourceService(fakeResourceReader{}, progressRecorder{events: &events})
+		WithFlakyFailures(0)(service)
+		if _, err := service.FlakyDependency(context.Background()); err != nil {
+			t.Fatalf("FlakyDependency() error = %v", err)
+		}
+		if len(events) != 1 || events[0].Phase != "complete" {
+			t.Fatalf("events = %#v, want one complete event", events)
+		}
+	})
+
 	t.Run("a failure without a wrapper is final", func(t *testing.T) {
 		service := newTestResourceService(fakeResourceReader{})
 		WithFlakyFailures(1)(service)
@@ -32,7 +44,7 @@ func TestFlakyDependency(t *testing.T) {
 		service := newTestResourceService(fakeResourceReader{})
 		WithStatusRetries(func(reader ResourceReader) (ResourceReader, error) {
 			var got domain.Resource
-			for range flakyFailures + 1 {
+			for range FlakyFailures + 1 {
 				var err error
 				got, err = reader.Status(context.Background(), "ignored")
 				errs = append(errs, err)

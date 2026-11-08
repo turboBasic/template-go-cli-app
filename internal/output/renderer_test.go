@@ -188,6 +188,20 @@ func TestStreamColorFollowsItsOwnTerminal(t *testing.T) {
 	}
 }
 
+func TestProgressColorIgnoresTheResultFormat(t *testing.T) {
+	options := Options{Format: FormatJSON, Color: ColorAuto, Terminals: TerminalCapabilities{Stderr: true}}
+	if !options.ProgressColorEnabled() {
+		t.Fatal("progress color = false, want true: JSON constrains stdout, not a stderr terminal")
+	}
+	if (Renderer{Options: options}).ColorEnabled() {
+		t.Fatal("results color = true, want false for JSON")
+	}
+	options.Terminals.Stderr = false
+	if options.ProgressColorEnabled() {
+		t.Fatal("progress color = true on a redirected stderr, want false")
+	}
+}
+
 func TestRendererNeverAddsANSI(t *testing.T) {
 	for _, format := range []Format{FormatText, FormatJSON} {
 		t.Run(string(format), func(t *testing.T) {

@@ -12,6 +12,7 @@ func TestDefaults(t *testing.T) {
 		Output:   "text",
 		Color:    "auto",
 		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
+		Retry:    RetryConfig{Demo: DemoRetryConfig{FlakyDependency: RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 3 * time.Second, MaxDelay: 10 * time.Second}}},
 	}); got != want {
 		t.Fatalf("Defaults() = %+v, want %+v", got, want)
 	}
