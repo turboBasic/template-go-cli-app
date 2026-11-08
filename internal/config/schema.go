@@ -13,7 +13,7 @@ const (
 
 func productionSchema() map[string]valueType {
 	return map[string]valueType{
-		"log.console.level":                   stringValue,
+		"log.level":                           stringValue,
 		"log.file.level":                      stringValue,
 		"log.file.path":                       pathValue,
 		"output":                              stringValue,

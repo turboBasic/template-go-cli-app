@@ -30,8 +30,8 @@ func configShowFixture(t *testing.T) (user, project string, newCommand func(args
 	user = filepath.Join(root, "xdg", "cli-app", "config.toml")
 	project = filepath.Join(root, "project.toml")
 	for path, data := range map[string]string{
-		user:    "[log.file]\nlevel = 'info'\n[log.console]\nlevel = 'warn'\n",
-		project: "[log.console]\nlevel = 'error'\n",
+		user:    "[log.file]\nlevel = 'info'\n[log]\nlevel = 'warn'\n",
+		project: "[log]\nlevel = 'error'\n",
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
@@ -56,11 +56,11 @@ func configShowFixture(t *testing.T) (user, project string, newCommand func(args
 func TestConfigShowReportsEverySource(t *testing.T) {
 	user, project, newCommand := configShowFixture(t)
 	want := map[string]configRow{
-		"log.file.level":    {Source: "user file", Origin: user},
-		"log.console.level": {Source: "project file", Origin: project},
-		"color":             {Source: "environment variable", Origin: "CLI_APP_COLOR"},
-		"quiet":             {Source: "flag", Origin: "--quiet"},
-		"output":            {Source: "default"},
+		"log.file.level": {Source: "user file", Origin: user},
+		"log.level":      {Source: "project file", Origin: project},
+		"color":          {Source: "environment variable", Origin: "CLI_APP_COLOR"},
+		"quiet":          {Source: "flag", Origin: "--quiet"},
+		"output":         {Source: "default"},
 	}
 
 	command, out := newCommand("--output", "json", "config", "show")
@@ -137,7 +137,7 @@ func TestConfigShowKeyFilter(t *testing.T) {
 		}
 		return result
 	}
-	if got := strings.Join(keys("log"), ","); got != "log.console.level,log.file.level,log.file.path" {
+	if got := strings.Join(keys("log"), ","); got != "log.file.level,log.file.path,log.level" {
 		t.Errorf("config show log = %s", got)
 	}
 	if got := keys("log.file.level"); len(got) != 1 || got[0] != "log.file.level" {

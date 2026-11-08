@@ -257,7 +257,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
-	if err := os.WriteFile(configFile, []byte("output = 'json'\nquiet = true\n[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
+	if err := os.WriteFile(configFile, []byte("output = 'json'\nquiet = true\n[log]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
@@ -278,8 +278,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := config.Config{
-		LogLevel: "debug",
-		Log:      config.LogConfig{Console: config.ConsoleLogConfig{Level: "debug"}, File: config.FileLogConfig{Level: "debug"}},
+		Log:      config.LogConfig{Level: "debug", File: config.FileLogConfig{Level: "debug"}},
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
@@ -778,10 +777,10 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	firstConfig := filepath.Join(t.TempDir(), "first.toml")
 	secondConfig := filepath.Join(t.TempDir(), "second.toml")
-	if err := os.WriteFile(firstConfig, []byte("[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
+	if err := os.WriteFile(firstConfig, []byte("[log]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(secondConfig, []byte("[log.console]\nlevel = 'error'\n"), 0o600); err != nil {
+	if err := os.WriteFile(secondConfig, []byte("[log]\nlevel = 'error'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
@@ -797,7 +796,7 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 			t.Fatalf("Execute() with %s: %v", path, err)
 		}
 	}
-	if len(configs) != 2 || configs[0].LogLevel != "info" || configs[1].LogLevel != "error" {
+	if len(configs) != 2 || configs[0].Log.Level != "info" || configs[1].Log.Level != "error" {
 		t.Fatalf("factory configs = %+v, want info then error", configs)
 	}
 }

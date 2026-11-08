@@ -52,10 +52,7 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 		if !flag.Changed {
 			continue
 		}
-		target := key
-		if target == "log-level" {
-			target = "log.console.level"
-		}
+		target := strings.ReplaceAll(key, "-", ".")
 		parsed, known, err := parseFlagValue(target, flag.Value, schema)
 		if !known {
 			continue
@@ -78,9 +75,7 @@ func loadWithSchema(files ConfigFiles, environment []string, flags map[string]Fl
 func environmentKey(name string) string {
 	switch name {
 	case "CLI_APP_LOG_LEVEL":
-		return "log.console.level"
-	case "CLI_APP_LOG_CONSOLE_LEVEL":
-		return "log.console.level"
+		return "log.level"
 	case "CLI_APP_LOG_FILE_LEVEL":
 		return "log.file.level"
 	case "CLI_APP_LOG_FILE_PATH":

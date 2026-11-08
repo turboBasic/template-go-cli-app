@@ -92,7 +92,6 @@ func decodeConfig(values map[string]any) (Config, error) {
 	if err := settings.Unmarshal("", &config); err != nil {
 		return Config{}, err
 	}
-	config.LogLevel = config.Log.Console.Level
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}

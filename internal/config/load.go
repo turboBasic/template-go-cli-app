@@ -65,8 +65,8 @@ func defaultValues() map[string]any {
 	config := Defaults()
 	return map[string]any{
 		"log": map[string]any{
-			"console": map[string]any{"level": config.Log.Console.Level},
-			"file":    map[string]any{"path": config.Log.File.Path, "level": config.Log.File.Level},
+			"level": config.Log.Level,
+			"file":  map[string]any{"path": config.Log.File.Path, "level": config.Log.File.Level},
 		},
 		"output":   config.Output,
 		"color":    config.Color,

@@ -8,8 +8,8 @@ import (
 func TestEntriesClassifyEverySource(t *testing.T) {
 	root := t.TempDir()
 	files := ConfigFiles{User: filepath.Join(root, "user.toml"), Project: filepath.Join(root, "project.toml")}
-	writeFile(t, files.User, "[log.file]\nlevel = 'info'\n[log.console]\nlevel = 'info'\n")
-	writeFile(t, files.Project, "[log.console]\nlevel = 'error'\n")
+	writeFile(t, files.User, "[log.file]\nlevel = 'info'\n[log]\nlevel = 'info'\n")
+	writeFile(t, files.Project, "[log]\nlevel = 'error'\n")
 
 	result, err := loadWithSchema(files, []string{"CLI_APP_COLOR=never"}, map[string]FlagValue{
 		"quiet": {Value: true, Changed: true, Source: "--quiet"},
@@ -24,7 +24,7 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 
 	for _, want := range []Entry{
 		{Key: "log.file.level", Source: KindUserFile, Origin: files.User},
-		{Key: "log.console.level", Source: KindProjectFile, Origin: files.Project},
+		{Key: "log.level", Source: KindProjectFile, Origin: files.Project},
 		{Key: "color", Source: KindEnvironment, Origin: "CLI_APP_COLOR"},
 		{Key: "quiet", Source: KindFlag, Origin: "--quiet"},
 		{Key: "output", Source: KindDefault},
