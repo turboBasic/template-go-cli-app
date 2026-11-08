@@ -11,10 +11,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	work := filepath.Join(root, "work")
 	user := configAt(t, filepath.Join(root, "user"), "[log.file]\npath = 'logs/user.jsonl'\n")
 	project := configAt(t, filepath.Join(root, "project"), "[log.file]\npath = 'logs/project.jsonl'\n")
-	schema := productionSchema()
-
 	t.Run("user TOML origin", func(t *testing.T) {
-		got, err := loadWithSchema(ConfigFiles{User: user}, nil, nil, schema, work)
+		got, err := loadAt(ConfigFiles{User: user}, nil, nil, work)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -22,7 +20,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("project TOML origin wins", func(t *testing.T) {
-		got, err := loadWithSchema(ConfigFiles{User: user, Project: project}, nil, nil, schema, work)
+		got, err := loadAt(ConfigFiles{User: user, Project: project}, nil, nil, work)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -33,7 +31,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("environment path uses working directory", func(t *testing.T) {
-		got, err := loadWithSchema(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil, schema, work)
+		got, err := loadAt(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil, work)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -42,7 +40,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 
 	t.Run("changed flag uses working directory", func(t *testing.T) {
 		flags := map[string]FlagValue{"log-file-path": {Value: "logs/flag.jsonl", Changed: true, Source: "--log-file-path"}}
-		got, err := loadWithSchema(ConfigFiles{Project: project}, nil, flags, schema, work)
+		got, err := loadAt(ConfigFiles{Project: project}, nil, flags, work)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,7 +50,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	t.Run("absolute path is preserved", func(t *testing.T) {
 		absolute := filepath.Join(root, "absolute.jsonl")
 		file := configAt(t, filepath.Join(root, "absolute"), "[log.file]\npath = '"+absolute+"'\n")
-		got, err := loadWithSchema(ConfigFiles{Project: file}, nil, nil, schema, work)
+		got, err := loadAt(ConfigFiles{Project: file}, nil, nil, work)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -60,7 +58,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("unset file path remains unset", func(t *testing.T) {
-		got, err := loadWithSchema(ConfigFiles{}, nil, nil, schema, work)
+		got, err := loadAt(ConfigFiles{}, nil, nil, work)
 		if err != nil {
 			t.Fatal(err)
 		}

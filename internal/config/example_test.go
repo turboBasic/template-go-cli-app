@@ -29,7 +29,7 @@ func TestExampleFileMatchesSchema(t *testing.T) {
 	}
 	text := strings.Join(uncommented, "\n")
 
-	values, err := decodeTOMLWithSchema(paths[0], []byte(text), productionSchema())
+	values, err := parseTOML(paths[0], []byte(text))
 	if err != nil {
 		t.Fatal(err)
 	}

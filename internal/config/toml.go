@@ -11,7 +11,7 @@ import (
 
 // DecodeTOML decodes and validates one configuration file before it is merged.
 func DecodeTOML(source string, data []byte) (Config, error) {
-	values, err := decodeTOMLWithSchema(source, data, productionSchema())
+	values, err := parseTOML(source, data)
 	if err != nil {
 		return Config{}, err
 	}
@@ -22,12 +22,12 @@ func DecodeTOML(source string, data []byte) (Config, error) {
 	return config, nil
 }
 
-func decodeTOMLWithSchema(source string, data []byte, schema map[string]valueType) (map[string]any, error) {
+func parseTOML(source string, data []byte) (map[string]any, error) {
 	values, err := toml.Parser().Unmarshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("decode configuration %s: %w", source, err)
 	}
-	if err := validateValues(source, values, schema, ""); err != nil {
+	if err := validateValues(source, values, productionSchema(), ""); err != nil {
 		return nil, err
 	}
 	return values, nil
