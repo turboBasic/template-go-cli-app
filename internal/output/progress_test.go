@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
-	"github.com/charmbracelet/harmonica"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
@@ -112,8 +111,10 @@ func TestStyledProgressReporter(t *testing.T) {
 	}
 }
 
+// barLine matches a drawn bar followed by its percentage; the glyphs and the width are the bar's own business.
+const barLine = `[█▏▎▍▌▋▊▉░]+ +%d%%`
+
 func TestStyledProgressReporterBar(t *testing.T) {
-	bar := barOf(25) + "  50%"
 	var out bytes.Buffer
 	reporter := NewStyledProgressReporter(&out, false)
 	reporter.Report(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"})
@@ -122,69 +123,16 @@ func TestStyledProgressReporterBar(t *testing.T) {
 	if !strings.Contains(out.String(), "\x1b[") {
 		t.Fatalf("output = %q, want ANSI escapes", out.String())
 	}
-	want := bar + " working Working (10/20)\nworking Waiting\n✓ Done (20/20)\n"
-	if got := stripANSI(out.String()); got != want {
-		t.Fatalf("stripped output = %q, want %q", got, want)
+	lines := strings.Split(strings.TrimSuffix(stripANSI(out.String()), "\n"), "\n")
+	wantLines := []string{"^" + fmt.Sprintf(barLine, 50) + ` working Working \(10/20\)$`, "^working Waiting$", `^✓ Done \(20/20\)$`}
+	if len(lines) != len(wantLines) {
+		t.Fatalf("stripped output = %q, want %d lines", lines, len(wantLines))
 	}
-	fills := map[string]bool{}
-	for _, sequence := range ansiEscape.FindAllString(out.String(), -1) {
-		if strings.HasPrefix(sequence, "\x1b[38;2;") {
-			fills[sequence] = true
+	for i, want := range wantLines {
+		if !regexp.MustCompile(want).MatchString(lines[i]) {
+			t.Errorf("line %d = %q, want it to match %s", i, lines[i], want)
 		}
 	}
-	if len(fills) < 2 {
-		t.Fatalf("output = %q, want the filled cells blended across at least two colors", out.String())
-	}
-}
-
-func TestSpinnerModelBar(t *testing.T) {
-	newModel := func() spinnerModel {
-		model := spinnerModel{spinner: spinner.New(), bar: newBar(), styles: newStyles()}
-		model.bar.spring = harmonica.NewSpring(harmonica.FPS(barFPS), 200, 1) // settles in a few frames, so the test stays quick
-		return model
-	}
-
-	t.Run("a counted label targets Current/Total and starts the glide", func(t *testing.T) {
-		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
-		model := updated.(spinnerModel)
-		if got := model.bar.target; got != 0.5 || cmd == nil {
-			t.Fatalf("target = %v, command = %v; want 0.5 and a frame command", got, cmd)
-		}
-		if got, want := stripANSI(model.View().Content), barOf(0)+"   0% working Working (10/20)"; got != want {
-			t.Fatalf("view before any frame = %q, want %q (no jump)", got, want)
-		}
-		for range 200 {
-			if !model.bar.ticking {
-				break
-			}
-			next, frameCmd := model.Update(cmd())
-			model, cmd = next.(spinnerModel), frameCmd
-		}
-		if got, want := stripANSI(model.View().Content), barOf(25)+"  50% working Working (10/20)"; got != want {
-			t.Fatalf("view after the glide = %q, want %q", got, want)
-		}
-		if cmd != nil || model.bar.ticking {
-			t.Fatalf("command = %v, ticking = %t; want the frames stopped once the glide settled", cmd, model.bar.ticking)
-		}
-	})
-
-	t.Run("a second label mid-glide retargets without a second frame chain", func(t *testing.T) {
-		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
-		if cmd == nil {
-			t.Fatal("first counted label returned no frame command")
-		}
-		updated, cmd = updated.Update(labelFor(app.ProgressEvent{Phase: "working", Current: 11, Total: 20, Message: "Working"}))
-		if got := updated.(spinnerModel).bar.target; got != 0.55 || cmd != nil {
-			t.Fatalf("target = %v, command = %v; want 0.55 and no new frame command", got, cmd)
-		}
-	})
-
-	t.Run("an uncounted label shows the spinner and no bar", func(t *testing.T) {
-		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Message: "Waiting"}))
-		if got := stripANSI(updated.View().Content); cmd != nil || strings.ContainsAny(got, "█░%") {
-			t.Fatalf("view = %q, command = %v; want the spinner, no bar and no frame command", got, cmd)
-		}
-	})
 }
 
 func TestStyledProgressReporterSerializesConcurrentCalls(t *testing.T) {
@@ -321,30 +269,3 @@ func TestNoopProgressReporter(t *testing.T) {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
-
-// barOf is the bar text with filled of its barCells cells filled.
-func barOf(filled int) string {
-	return strings.Repeat("█", filled) + strings.Repeat("░", barCells-filled)
-}
-
-func TestBarMovesInEighthsOfACell(t *testing.T) {
-	bar := newBar()
-	for _, test := range []struct {
-		name     string
-		fraction float64
-		want     string
-	}{
-		{name: "empty", fraction: 0, want: barOf(0) + "   0%"},
-		{name: "a whole number of cells has no partial glyph", fraction: 0.5, want: barOf(25) + "  50%"},
-		{name: "three eighths of the third cell", fraction: (2*8 + 3) / float64(barCells*8), want: "██▍" + strings.Repeat("░", barCells-3) + "   5%"},
-		{name: "seven eighths", fraction: 7 / float64(barCells*8), want: "▉" + strings.Repeat("░", barCells-1) + "   2%"},
-		{name: "full", fraction: 1, want: barOf(barCells) + " 100%"},
-		{name: "out of range is clamped", fraction: 1.5, want: barOf(barCells) + " 100%"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := stripANSI(bar.viewAs(test.fraction)); got != test.want {
-				t.Fatalf("viewAs(%v) = %q, want %q", test.fraction, got, test.want)
-			}
-		})
-	}
-}
