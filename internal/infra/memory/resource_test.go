@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -58,11 +59,11 @@ func TestResourceReaderStatusAndApply(t *testing.T) {
 
 func TestResourceReaderRejectsUnknownResource(t *testing.T) {
 	reader := NewResourceReader()
-	if _, err := reader.Status(context.Background(), "missing"); err != domain.ErrResourceNotFound {
-		t.Fatalf("Status() error = %v, want resource not found", err)
+	if _, err := reader.Status(context.Background(), "missing"); !errors.Is(err, domain.ErrResourceNotFound) || !strings.Contains(err.Error(), `"missing"`) {
+		t.Fatalf("Status() error = %v, want resource not found naming the resource", err)
 	}
-	if _, err := reader.Apply(context.Background(), "missing", ""); err != domain.ErrResourceNotFound {
-		t.Fatalf("Apply() error = %v, want resource not found", err)
+	if _, err := reader.Apply(context.Background(), "missing", ""); !errors.Is(err, domain.ErrResourceNotFound) || !strings.Contains(err.Error(), "example-1, example-2") {
+		t.Fatalf("Apply() error = %v, want resource not found listing the known names", err)
 	}
 }
 

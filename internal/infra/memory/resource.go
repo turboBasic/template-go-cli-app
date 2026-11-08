@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -40,6 +42,10 @@ func (r *ResourceReader) List(ctx context.Context) ([]domain.Resource, error) {
 	return append([]domain.Resource(nil), r.resources...), nil
 }
 
+func (r *ResourceReader) notFound(name string) error {
+	return fmt.Errorf("%w: %q; known names are %s", domain.ErrResourceNotFound, name, strings.Join(r.Names(), ", "))
+}
+
 // Status returns a local fixture by name.
 func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resource, error) {
 	if err := ctx.Err(); err != nil {
@@ -50,7 +56,7 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 			return resource, nil
 		}
 	}
-	return domain.Resource{}, domain.ErrResourceNotFound
+	return domain.Resource{}, r.notFound(name)
 }
 
 // Apply marks a local fixture ready.
@@ -64,5 +70,5 @@ func (r *ResourceReader) Apply(ctx context.Context, name string, _ logging.Secre
 			return r.resources[i], nil
 		}
 	}
-	return domain.Resource{}, domain.ErrResourceNotFound
+	return domain.Resource{}, r.notFound(name)
 }

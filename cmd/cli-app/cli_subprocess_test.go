@@ -17,9 +17,9 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	if code != 0 || stderr != "" || stdout != "NAME        STATUS\nexample-1   ready\nexample-2   pending\n" {
 		t.Fatalf("resource list = stdout %q, stderr %q, exit %d; want deterministic fixture output and exit 0", stdout, stderr, code)
 	}
-	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "invalid", "--output", "json")
-	if stdout != "" || code != 2 || strings.Count(stderr, "unknown resource") != 1 {
-		t.Fatalf("invalid JSON command = stdout %q, stderr %q, exit %d; want empty stdout, diagnostic stderr, exit 2", stdout, stderr, code)
+	stdout, stderr, code = runCLIProcess(t, binary, "resource", "status", "invalid", "--output", "json")
+	if stdout != "" || code != 1 || strings.Count(stderr, "resource not found") != 1 {
+		t.Fatalf("invalid JSON command = stdout %q, stderr %q, exit %d; want empty stdout, diagnostic stderr, exit 1", stdout, stderr, code)
 	}
 
 	stdout, stderr, code = runCLIProcess(t, binary, "resource", "status", "example-1", "--output", "json")

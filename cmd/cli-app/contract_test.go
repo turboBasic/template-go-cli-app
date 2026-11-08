@@ -26,7 +26,6 @@ func TestCLIContract(t *testing.T) {
 		{"extra argument to completion shell", []string{"completion", "bash", "extra"}, "unknown command \"extra\" for \"cli-app completion bash\"\n"},
 		{"unknown flag", []string{"resource", "--bogus"}, "unknown flag: --bogus\n"},
 		{"missing argument", []string{"resource", "apply"}, "accepts 1 arg(s), received 0\n"},
-		{"unknown resource", []string{"resource", "apply", "invalid", "--output", "json"}, "unknown resource \"invalid\"; valid names are example-1, example-2\n"},
 		{"invalid output", []string{"--output", "xml", "resource", "list"}, "decode effective configuration: invalid output \"xml\": must be text or json\n"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

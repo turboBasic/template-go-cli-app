@@ -300,7 +300,7 @@ func newResourceStatusCommand(getResources func() *app.ResourceService, getRende
 	return &cobra.Command{
 		Use:               "status <name>",
 		Short:             "Show a resource status",
-		Args:              validateResourceName(names),
+		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resource, err := getResources().Status(cmd.Context(), args[0])
@@ -316,7 +316,7 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, getRender
 	return &cobra.Command{
 		Use:               "apply <name>",
 		Short:             "Apply a resource",
-		Args:              validateResourceName(names),
+		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resource, err := getResources().Apply(cmd.Context(), args[0])
@@ -340,19 +340,5 @@ func completeResourceNames(names []string) cobra.CompletionFunc {
 			}
 		}
 		return matches, cobra.ShellCompDirectiveNoFileComp
-	}
-}
-
-func validateResourceName(names []string) cobra.PositionalArgs {
-	return func(cmd *cobra.Command, args []string) error {
-		if err := cobra.ExactArgs(1)(cmd, args); err != nil {
-			return app.Classify(app.ErrValidation, err)
-		}
-		for _, name := range names {
-			if args[0] == name {
-				return nil
-			}
-		}
-		return app.Classify(app.ErrValidation, fmt.Errorf("unknown resource %q; valid names are %s", args[0], strings.Join(names, ", ")))
 	}
 }
