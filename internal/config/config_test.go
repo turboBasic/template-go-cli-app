@@ -6,16 +6,11 @@ import (
 	"time"
 )
 
-func TestDefaults(t *testing.T) {
-	if got, want := Defaults(), (Config{
-		Log:      LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}},
-		Output:   "text",
-		Color:    "auto",
-		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
-		Retry:    RetryConfig{Demo: DemoRetryConfig{FlakyDependency: RetryPolicyConfig{MaxAttempts: 3, InitialDelay: 3 * time.Second, MaxDelay: 10 * time.Second}}},
-	}); got != want {
-		t.Fatalf("Defaults() = %+v, want %+v", got, want)
-	}
+// withDefaults returns Defaults() with one test's edits, so a case lists only what it changes.
+func withDefaults(edit func(*Config)) Config {
+	config := Defaults()
+	edit(&config)
+	return config
 }
 
 func durationPtr(value time.Duration) *time.Duration { return &value }

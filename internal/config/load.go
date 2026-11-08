@@ -61,32 +61,6 @@ func mergeFilesWithSchema(files ConfigFiles, schema map[string]valueType) (LoadR
 	return LoadResult{Sources: sources, values: values, files: files}, nil
 }
 
-func defaultValues() map[string]any {
-	config := Defaults()
-	return map[string]any{
-		"log": map[string]any{
-			"level": config.Log.Level,
-			"file":  map[string]any{"path": config.Log.File.Path, "level": config.Log.File.Level},
-		},
-		"output": config.Output,
-		"color":  config.Color,
-		"quiet":  config.Quiet,
-		// Optional timeouts are listed as nil so inspection reports every supported key; nil renders as unset.
-		"timeouts": map[string]any{"cleanup": config.Timeouts.Cleanup, "demo": map[string]any{
-			"structured_output": nil,
-			"not_found":         nil,
-			"secret_credential": nil,
-		}},
-		"demo": map[string]any{"secret_credential": map[string]any{"reference": config.Demo.SecretCredential.Reference}},
-		"retry": map[string]any{"demo": map[string]any{"flaky_dependency": map[string]any{
-			"max_attempts":  config.Retry.Demo.FlakyDependency.MaxAttempts,
-			"initial_delay": config.Retry.Demo.FlakyDependency.InitialDelay,
-			"max_delay":     config.Retry.Demo.FlakyDependency.MaxDelay,
-			"jitter":        config.Retry.Demo.FlakyDependency.Jitter,
-		}}},
-	}
-}
-
 type leaf struct {
 	key   string
 	value any

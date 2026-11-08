@@ -56,7 +56,6 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	user := configAt(t, filepath.Join(root, "user"), "[log.file]\npath = 'logs/user.jsonl'\n")
 	project := configAt(t, filepath.Join(root, "project"), "[log.file]\npath = 'logs/project.jsonl'\n")
 	schema := productionSchema()
-	schema["log.file.path"] = pathValue
 
 	t.Run("user TOML origin", func(t *testing.T) {
 		got, err := loadWithSchema(ConfigFiles{User: user}, nil, nil, schema, work)

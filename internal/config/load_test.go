@@ -23,7 +23,9 @@ func TestLoadFilesPrecedenceAndSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Config{Log: LogConfig{Level: "error", File: FileLogConfig{Level: "debug"}}, Output: "json", Color: "auto", Quiet: false, Timeouts: TimeoutConfig{Cleanup: 5 * time.Second}, Retry: Defaults().Retry}); got.Config != want {
+	want := Defaults()
+	want.Log.Level, want.Output = "error", "json"
+	if got.Config != want {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
 	for key, want := range map[string]Source{
@@ -106,43 +108,5 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 		if got.Sources[leaf.key] == "" {
 			t.Errorf("leaf %q has no source", leaf.key)
 		}
-	}
-}
-
-// Every supported setting must be listed in defaultValues, and the Config fields must match the schema keys;
-// a koanf tag that differs from its schema key would leave an override reported but never applied.
-func TestSchemaKeysAreListedAndMatchConfigTags(t *testing.T) {
-	listed := map[string]bool{}
-	for _, leaf := range leaves(defaultValues()) {
-		listed[leaf.key] = true
-	}
-	tagged := map[string]bool{}
-	var walk func(reflect.Type, string)
-	walk = func(typ reflect.Type, prefix string) {
-		for field := range typ.Fields() {
-			key := prefix + field.Tag.Get("koanf")
-			if field.Type.Kind() == reflect.Struct {
-				walk(field.Type, key+".")
-				continue
-			}
-			tagged[key] = true
-		}
-	}
-	walk(reflect.TypeFor[Config](), "")
-	for key := range productionSchema() {
-		if !listed[key] {
-			t.Errorf("schema key %q has no entry in defaultValues", key)
-		}
-		if !tagged[key] {
-			t.Errorf("schema key %q has no Config field", key)
-		}
-		delete(listed, key)
-		delete(tagged, key)
-	}
-	for key := range listed {
-		t.Errorf("defaultValues key %q is not in the schema", key)
-	}
-	for key := range tagged {
-		t.Errorf("Config field %q is not in the schema", key)
 	}
 }

@@ -69,7 +69,7 @@ type LogConfig struct {
 
 // FileLogConfig configures optional JSON Lines file logging.
 type FileLogConfig struct {
-	Path  string `koanf:"path"`
+	Path  string `koanf:"path" config:"path"`
 	Level string `koanf:"level"`
 }
 
