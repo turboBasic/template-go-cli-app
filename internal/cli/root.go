@@ -18,6 +18,9 @@ import (
 
 const configID = "cli-app"
 
+// ownTimeout marks a demo with no timeouts.demo key that applies --timeout itself.
+const ownTimeout = "own-timeout"
+
 // ResourceFactory builds the command's application service and its dependency cleanup.
 type ResourceFactory func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
 
@@ -132,8 +135,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
-		if name := demoTimeoutName(cmd); name != "" && flags.Lookup("timeout").Changed {
-			// long-running has no schema key, so the loader drops this overlay; it applies --timeout itself.
+		if name := demoTimeoutName(cmd); name != "" && cmd.Annotations[ownTimeout] == "" && flags.Lookup("timeout").Changed {
 			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		if flag := cmd.Flags().Lookup("max-attempts"); flag != nil && flag.Changed {
@@ -353,8 +355,9 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 	rejectUnknownSubcommands(demo)
 	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names), newDemoFlakyDependencyCommand(getResources, getRenderer))
 	demo.AddCommand(&cobra.Command{
-		Use:   "long-running",
-		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
+		Use:         "long-running",
+		Annotations: map[string]string{ownTimeout: "true"},
+		Short:       "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
 		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
 			"color-capable terminal shows a bar that fills. Redirected stderr keeps plain lines and --quiet silences them. The\n" +
 			"length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
@@ -390,8 +393,9 @@ func flagTimeoutContext(cmd *cobra.Command) (context.Context, context.CancelFunc
 func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
 	defaultPolicy := config.Defaults().Retry.Demo.FlakyDependency
 	command := &cobra.Command{
-		Use:   "flaky-dependency",
-		Short: "Demonstrate retries of a read-only dependency that fails transiently",
+		Use:         "flaky-dependency",
+		Annotations: map[string]string{ownTimeout: "true"},
+		Short:       "Demonstrate retries of a read-only dependency that fails transiently",
 		Long: fmt.Sprintf("Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
 			"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
 			"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+

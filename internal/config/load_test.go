@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -110,24 +109,40 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 	}
 }
 
-// Every supported setting must be listed and settable through the environment; add the missing
-// default, or the environmentKey case, when this fails.
-func TestSchemaKeysAreListedAndHaveEnvironmentVariables(t *testing.T) {
+// Every supported setting must be listed in defaultValues, and the Config fields must match the schema keys;
+// a koanf tag that differs from its schema key would leave an override reported but never applied.
+func TestSchemaKeysAreListedAndMatchConfigTags(t *testing.T) {
 	listed := map[string]bool{}
 	for _, leaf := range leaves(defaultValues()) {
 		listed[leaf.key] = true
 	}
+	tagged := map[string]bool{}
+	var walk func(reflect.Type, string)
+	walk = func(typ reflect.Type, prefix string) {
+		for field := range typ.Fields() {
+			key := prefix + field.Tag.Get("koanf")
+			if field.Type.Kind() == reflect.Struct {
+				walk(field.Type, key+".")
+				continue
+			}
+			tagged[key] = true
+		}
+	}
+	walk(reflect.TypeFor[Config](), "")
 	for key := range productionSchema() {
 		if !listed[key] {
 			t.Errorf("schema key %q has no entry in defaultValues", key)
 		}
-		name := "CLI_APP_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
-		if got := environmentKey(name); got != key {
-			t.Errorf("environmentKey(%q) = %q, want %q", name, got, key)
+		if !tagged[key] {
+			t.Errorf("schema key %q has no Config field", key)
 		}
 		delete(listed, key)
+		delete(tagged, key)
 	}
 	for key := range listed {
 		t.Errorf("defaultValues key %q is not in the schema", key)
+	}
+	for key := range tagged {
+		t.Errorf("Config field %q is not in the schema", key)
 	}
 }
