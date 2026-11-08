@@ -129,7 +129,7 @@ func TestStyledProgressReporterBar(t *testing.T) {
 
 func TestSpinnerModelBar(t *testing.T) {
 	newModel := func() spinnerModel {
-		model := spinnerModel{spinner: spinner.New(), bar: newBar(), styles: newStyles()}
+		model := spinnerModel{spinner: spinner.New(), bar: newBar(newStyles()), styles: newStyles()}
 		model.bar.SetSpringOptions(200, 1) // settles in a few frames, so the test stays quick
 		return model
 	}

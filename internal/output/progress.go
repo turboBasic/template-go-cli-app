@@ -60,7 +60,7 @@ func NewStyledProgressReporter(writer io.Writer, animate bool) *StyledProgressRe
 	if writer == nil {
 		writer = io.Discard
 	}
-	return &StyledProgressReporter{writer: writer, styles: newStyles(), bar: newBar(), animate: animate}
+	return &StyledProgressReporter{writer: writer, styles: newStyles(), bar: newBar(newStyles()), animate: animate}
 }
 
 // startProgram runs the spinner; a command that reports no progress never reaches it, so it never
@@ -186,11 +186,17 @@ func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
 	return line
 }
 
-// newBar returns a bar of 20 cells and a percentage. Basic ANSI colors and fixed fill characters
-// keep `--color always` bytes independent of the terminal, as styles do; the model's own
-// default colour blend and half-block fill are not used.
-func newBar() progress.Model {
-	bar := progress.New(progress.WithColors(lipgloss.Color("6")), progress.WithFillCharacters('█', '░'), progress.WithWidth(25))
+const (
+	barCells     = 20
+	percentCells = len(" 100%") // the model counts its percentage text in the width
+)
+
+// newBar returns a bar of barCells cells and a percentage. Basic ANSI colors and fixed fill
+// characters keep `--color always` bytes independent of the terminal, as styles do; the model's own
+// default colour blend and half-block fill are not used. The fill takes the phase colour from
+// styles; the empty cells take a plain grey because the model colours them and cannot be Faint.
+func newBar(s styles) progress.Model {
+	bar := progress.New(progress.WithColors(s.phase.GetForeground()), progress.WithFillCharacters('█', '░'), progress.WithWidth(barCells+percentCells))
 	bar.EmptyColor = lipgloss.Color("8")
 	return bar
 }
