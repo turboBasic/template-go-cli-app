@@ -125,11 +125,20 @@ func TestStyledProgressReporterBar(t *testing.T) {
 	if got := stripANSI(out.String()); got != want {
 		t.Fatalf("stripped output = %q, want %q", got, want)
 	}
+	fills := map[string]bool{}
+	for _, sequence := range ansiEscape.FindAllString(out.String(), -1) {
+		if strings.HasPrefix(sequence, "\x1b[38;2;") {
+			fills[sequence] = true
+		}
+	}
+	if len(fills) < 2 {
+		t.Fatalf("output = %q, want the filled cells blended across at least two colors", out.String())
+	}
 }
 
 func TestSpinnerModelBar(t *testing.T) {
 	newModel := func() spinnerModel {
-		model := spinnerModel{spinner: spinner.New(), bar: newBar(newStyles()), styles: newStyles()}
+		model := spinnerModel{spinner: spinner.New(), bar: newBar(), styles: newStyles()}
 		model.bar.SetSpringOptions(200, 1) // settles in a few frames, so the test stays quick
 		return model
 	}
