@@ -98,7 +98,7 @@ The loader retains the source metadata needed for path resolution. `config show 
 
 Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation. `--color`, `CLI_APP_COLOR` and the config `color` key govern results and progress: `auto` styles a terminal unless `NO_COLOR` is non-empty, `always` styles regardless of `NO_COLOR`, `never` and JSON never style, and `CLICOLOR_FORCE` does not apply; help and errors follow terminal detection, `NO_COLOR` and `CLICOLOR_FORCE` as Fang does. Domain and application code remain independent of rendering libraries.
 
-The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Representative commands are `cli-app resource list`, `cli-app resource status` and `cli-app resource apply`.
+The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Representative commands are `cli-app resource list`, `cli-app resource status` and `cli-app resource apply`. Commands that only demonstrate a template contract live under `cli-app demo`, show one contract each and are deleted by an application built from the template; `cli-app demo long-running` shows the determinate progress bar.
 
 ## 7. Logging and secret handling
 
