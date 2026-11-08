@@ -34,7 +34,7 @@ The template provides hierarchical commands, help, flags, shell completion and v
 | Terminal capability detection    | Go terminal libraries                                          |
 | Terminal styling                 | Lip Gloss                                                      |
 | Animated progress                | Bubbles / Bubble Tea                                           |
-| Concurrent progress coordination | Application event coordination                                 |
+| Concurrent progress coordination | Mutex-guarded progress reporters                               |
 | Secret resolution                | Provider-independent interface; optional 1Password CLI adapter |
 | Tool versions and task runner    | mise                                                           |
 | Git hooks                        | Prek                                                           |
