@@ -909,3 +909,93 @@ func TestCredentialResolvesOnlyWhenApplying(t *testing.T) {
 		})
 	}
 }
+
+func TestDemoLongRunningProgress(t *testing.T) {
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	for _, test := range []struct {
+		name string
+		args []string
+		mode string // plain, quiet or styled
+	}{
+		{name: "redirected default", mode: "plain"},
+		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
+		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
+		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setupConfigEnvironment(t)
+			reader := memory.NewResourceReader()
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				return app.NewResourceService(reader, logger, progressReporter, app.WithLongRunningDuration(20*time.Millisecond)), nil, nil
+			}, testBuildInfo(), reader.Names())
+			command.SetArgs(append(append([]string{}, test.args...), "demo", "long-running"))
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want none", stdout.String())
+			}
+			got := stderr.String()
+			switch test.mode {
+			case "quiet":
+				if got != "" {
+					t.Fatalf("stderr = %q, want none", got)
+				}
+			case "plain":
+				if !strings.Contains(got, "working: Working (7/100)\n") || !strings.HasSuffix(got, "complete: Long-running demo complete (100/100)\n") || strings.Contains(got, "\x1b") {
+					t.Fatalf("stderr = %q, want plain counted lines ending in completion, with no escapes", got)
+				}
+			default:
+				plain := ansi.ReplaceAllString(got, "")
+				if !strings.Contains(got, "\x1b[") || !strings.Contains(plain, "███▌"+strings.Repeat("░", 46)+"   7% working Working (7/100)\n") || !strings.HasSuffix(plain, "✓ Long-running demo complete (100/100)\n") {
+					t.Fatalf("stderr = %q, want the bar at 7%% and the completion line last", got)
+				}
+			}
+		})
+	}
+}
+
+func TestDemoCommands(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "group help", args: []string{"demo"}},
+		{name: "help topic", args: []string{"help", "demo", "long-running"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := newTestRootCommand(t)
+			command.SetArgs(test.args)
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			err := command.Execute()
+			if err != nil || !strings.Contains(stdout.String(), "long-running") {
+				t.Fatalf("Execute() error = %v, stdout %q; want help naming long-running", err, stdout.String())
+			}
+		})
+	}
+}
+
+func TestDemoLongRunningHonorsTimeout(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader := memory.NewResourceReader()
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter, app.WithLongRunningDuration(time.Minute)), nil, nil
+	}, testBuildInfo(), reader.Names())
+	command.SetArgs([]string{"demo", "long-running", "--timeout", "50ms"})
+	var stdout, stderr bytes.Buffer
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	started := time.Now()
+	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) {
+		t.Fatalf("Execute() error = %v, want a timeout error", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second || strings.Contains(stderr.String(), "complete:") {
+		t.Fatalf("took %s with stderr %q, want it to stop at the timeout without completing", elapsed, stderr.String())
+	}
+}

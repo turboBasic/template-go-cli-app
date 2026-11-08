@@ -63,7 +63,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
 	flags.StringVar(&color, "color", "auto", "result color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
-	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected resource operation")
+	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected operation")
 	var resources *app.ResourceService
 	var renderer output.Renderer
 	var loadResult config.LoadResult
@@ -203,7 +203,11 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	closeAfterRun(status, cleanup)
 	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
-	root.AddCommand(resource, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
+	demo := newDemoCommand(getResources)
+	for _, command := range demo.Commands() {
+		closeAfterRun(command, cleanup)
+	}
+	root.AddCommand(resource, demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})
@@ -326,6 +330,40 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, getRender
 			return getRenderer().RenderResource(resource)
 		},
 	}
+}
+
+// newDemoCommand groups the template's demonstrations of its contracts. An application built from the
+// template deletes the group, and every demo with it.
+func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
+	demo := &cobra.Command{
+		Use:   "demo",
+		Short: "Demonstrations of the template's contracts; delete this group in your application",
+		Long: "Demonstrations of the template's contracts, kept so a developer can see each one working and copy it.\n" +
+			"They are not part of an application built from the template: delete this group, and the code it calls.",
+	}
+	rejectUnknownSubcommands(demo)
+	demo.AddCommand(&cobra.Command{
+		Use:   "long-running",
+		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
+		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
+			"color-capable terminal shows a bar that fills. Redirected stderr, --output json and --quiet keep plain lines or\n" +
+			"silence. The length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
+		Args: validationArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			if cmd.Flags().Changed("timeout") {
+				timeout, err := cmd.Flags().GetDuration("timeout")
+				if err != nil || timeout <= 0 {
+					return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeout))
+				}
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
+			return getResources().LongRunning(ctx)
+		},
+	})
+	return demo
 }
 
 func completeResourceNames(names []string) cobra.CompletionFunc {
