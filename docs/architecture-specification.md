@@ -108,7 +108,7 @@ Any additional destination attaches behind the same redaction, and rotation is e
 
 ## 8. Progress, errors and retries
 
-A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Where several operations report at once, rendering is coordinated so they do not corrupt terminal output or block application execution indefinitely.
+A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Where several operations report at once, rendering is coordinated so they do not corrupt terminal output.
 
 Use classified errors, propagate cancellation, perform cleanup and retry only eligible infrastructure operations with bounded behavior. Do not retry whole application workflows automatically. Exact numeric exit-code mapping and retry backoff defaults remain implementation-level details to finalize while preserving these contracts.
 
