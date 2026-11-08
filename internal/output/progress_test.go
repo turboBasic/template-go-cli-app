@@ -35,18 +35,17 @@ func TestPlainProgressReporter(t *testing.T) {
 			want: "applying: Applying (1/2)\nwaiting: Waiting\n",
 		},
 		{
-			name: "consecutive identical completion is deduplicated",
+			name: "identical completions from separate operations are both reported",
 			events: []app.ProgressEvent{
 				{Phase: "applying", Current: 2, Total: 2, Message: "Applied"},
 				{Phase: "applying", Current: 2, Total: 2, Message: "Applied"},
 			},
-			want: "applying: Applied (2/2)\n",
+			want: "applying: Applied (2/2)\napplying: Applied (2/2)\n",
 		},
 		{
 			name: "completion phase is retained after other progress",
 			events: []app.ProgressEvent{
 				{Phase: "applying", Message: "Applying"},
-				{Phase: "complete", Message: "Done"},
 				{Phase: "complete", Message: "Done"},
 			},
 			want: "applying: Applying\ncomplete: Done\n",
@@ -106,7 +105,7 @@ func TestStyledProgressReporter(t *testing.T) {
 	if !strings.Contains(out.String(), "\x1b[") {
 		t.Fatalf("output = %q, want ANSI escapes", out.String())
 	}
-	if got, want := stripANSI(out.String()), "applying Applying resource\n✓ Resource applied (1/1)\n"; got != want {
+	if got, want := stripANSI(out.String()), "applying Applying resource\n✓ Resource applied (1/1)\n✓ Resource applied (1/1)\n"; got != want {
 		t.Fatalf("stripped output = %q, want %q", got, want)
 	}
 }
