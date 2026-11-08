@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
@@ -114,6 +116,52 @@ func TestCLIProcessOnePasswordReference(t *testing.T) {
 				t.Fatalf("op argv = %q (read error %v), want %q", argv, err, tt.wantArgv)
 			}
 		})
+	}
+}
+
+func TestCLIProcessLongRunningDemoStopsOnSIGINT(t *testing.T) {
+	binary := buildCLIProcess(t, "")
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "--config", configFile, "--color", "always", "demo", "long-running")
+	command.Env = append(isolatedEnv(), "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "no-user-config"))
+	stderr, err := command.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = command.Process.Kill() })
+
+	lines := bufio.NewScanner(stderr)
+	if !lines.Scan() || !strings.Contains(lines.Text(), "working") {
+		t.Fatalf("first stderr line = %q (scan error %v), want progress", lines.Text(), lines.Err())
+	}
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	output := lines.Text()
+	finished := make(chan error, 1)
+	go func() {
+		for lines.Scan() {
+			output += "\n" + lines.Text()
+		}
+		finished <- command.Wait()
+	}()
+	select {
+	case err := <-finished:
+		var exitError *exec.ExitError
+		if !errors.As(err, &exitError) || exitError.ExitCode() != 130 {
+			t.Fatalf("Wait() error = %v, want exit code 130", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("process kept running 10s after SIGINT, want it to stop between steps")
+	}
+	if got := strings.Count(output, "interrupted by SIGINT"); got != 1 || strings.Contains(output, "✓") {
+		t.Fatalf("stderr = %q, want one interrupt report and no completion line", output)
 	}
 }
 
