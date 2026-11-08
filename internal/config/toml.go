@@ -88,11 +88,11 @@ func knownTable(schema map[string]valueType, path string) bool {
 func decodeConfig(values map[string]any) (Config, error) {
 	for _, key := range []string{
 		"timeouts.cleanup",
-		"timeouts.resource.list",
-		"timeouts.resource.status",
-		"timeouts.resource.apply",
-		"retry.resource.status.initial_delay",
-		"retry.resource.status.max_delay",
+		"timeouts.demo.structured_output",
+		"timeouts.demo.not_found",
+		"timeouts.demo.secret_credential",
+		"retry.demo.not_found.initial_delay",
+		"retry.demo.not_found.max_delay",
 	} {
 		if err := decodeDuration(values, key); err != nil {
 			return Config{}, err

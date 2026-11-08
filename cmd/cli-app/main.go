@@ -33,14 +33,14 @@ func main() {
 	resources := memory.NewResourceReader()
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		var reader app.ResourceReader = resources
-		if configured := effective.Retry.Resource.Status; configured != nil {
+		if configured := effective.Retry.Demo.NotFound; configured != nil {
 			retryingReader, err := retry.NewResourceReader(reader, retry.Policy(*configured), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())))
 			if err != nil {
 				return nil, nil, fmt.Errorf("configure status retries: %w", err)
 			}
 			reader = retryingReader
 		}
-		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Resource.Credential)), nil, nil
+		return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Demo.SecretCredential.Reference)), nil, nil
 	}, buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {

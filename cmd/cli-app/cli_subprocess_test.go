@@ -83,7 +83,7 @@ func TestCLIProcessOnePasswordReference(t *testing.T) {
 		{name: "missing op is reported", credential: reference,
 			args: []string{"resource", "apply", "example-1"}, wantCode: 1, wantStderr: "op is not installed"},
 		{name: "reference without a scheme is rejected before op runs", stub: "printf s3cr3t", credential: "vault/item/field",
-			args: []string{"resource", "apply", "example-1"}, wantCode: 2, wantStderr: "resource.credential"},
+			args: []string{"resource", "apply", "example-1"}, wantCode: 2, wantStderr: "demo.secret_credential.reference"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -93,7 +93,7 @@ func TestCLIProcessOnePasswordReference(t *testing.T) {
 			}
 			env := []string{"PATH=" + pathDir}
 			if tt.credential != "" {
-				env = append(env, "CLI_APP_RESOURCE_CREDENTIAL="+tt.credential)
+				env = append(env, "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE="+tt.credential)
 			}
 			stdout, stderr, code := runCLIProcessEnv(t, binary, env, tt.args...)
 			if code != tt.wantCode || !strings.Contains(stderr, tt.wantStderr) {

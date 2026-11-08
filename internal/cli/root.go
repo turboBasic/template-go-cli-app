@@ -133,7 +133,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
 		if cmd.Parent() != nil && cmd.Parent().Name() == "resource" && flags.Lookup("timeout").Changed {
-			key := "timeouts.resource." + cmd.Name()
+			key := "timeouts.demo." + transitionalDemoName(cmd.Name())
 			flagValues[key] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		loaded, err := config.Load(files, flagValues)
@@ -168,7 +168,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			stopProgress = styled.Close
 			progressReporter = styled
 		}
-		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Resource); timeout != nil {
+		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Demo); timeout != nil {
 			parentContext := cmd.Context()
 			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
 			cmd.SetContext(operationContext)
@@ -232,17 +232,31 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 }
 
-func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeouts) *time.Duration {
+// transitionalDemoName maps a resource command to the demo that replaces it; task 1.2 deletes it.
+func transitionalDemoName(command string) string {
+	switch command {
+	case "list":
+		return "structured_output"
+	case "status":
+		return "not_found"
+	case "apply":
+		return "secret_credential"
+	default:
+		return command
+	}
+}
+
+func resourceOperationTimeout(cmd *cobra.Command, timeouts config.DemoTimeouts) *time.Duration {
 	if cmd.Parent() == nil || cmd.Parent().Name() != "resource" {
 		return nil
 	}
-	switch cmd.Name() {
-	case "list":
-		return timeouts.List
-	case "status":
-		return timeouts.Status
-	case "apply":
-		return timeouts.Apply
+	switch transitionalDemoName(cmd.Name()) {
+	case "structured_output":
+		return timeouts.StructuredOutput
+	case "not_found":
+		return timeouts.NotFound
+	case "secret_credential":
+		return timeouts.SecretCredential
 	default:
 		return nil
 	}

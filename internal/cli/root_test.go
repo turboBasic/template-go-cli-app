@@ -282,7 +282,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
-		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Resource: config.ResourceTimeouts{List: durationPointer(2 * time.Minute)}},
+		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Demo: config.DemoTimeouts{StructuredOutput: durationPointer(2 * time.Minute)}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
@@ -302,7 +302,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 	setupConfigEnvironment(t)
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
-	if err := os.WriteFile(configFile, []byte("[timeouts.resource]\nlist = '80ms'\n"), 0o600); err != nil {
+	if err := os.WriteFile(configFile, []byte("[timeouts.demo]\nstructured_output = '80ms'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := blockingTimeoutReader{
@@ -382,7 +382,7 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *testing.T) {
 	setupConfigEnvironment(t)
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
-	if err := os.WriteFile(configFile, []byte("[timeouts]\ncleanup = '300ms'\n[timeouts.resource]\nlist = '30ms'\n"), 0o600); err != nil {
+	if err := os.WriteFile(configFile, []byte("[timeouts]\ncleanup = '300ms'\n[timeouts.demo]\nstructured_output = '30ms'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := blockingTimeoutReader{
@@ -886,11 +886,11 @@ func TestCredentialResolvesOnlyWhenApplying(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
-			t.Setenv("CLI_APP_RESOURCE_CREDENTIAL", "op://vault/item/field")
+			t.Setenv("CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE", "op://vault/item/field")
 			resolver := &countingResolver{}
 			reader := memory.NewResourceReader()
 			command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-				return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(resolver, effective.Resource.Credential)), nil, nil
+				return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(resolver, effective.Demo.SecretCredential.Reference)), nil, nil
 			}, testBuildInfo(), reader.Names())
 			var out bytes.Buffer
 			command.SetOut(&out)
