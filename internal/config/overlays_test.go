@@ -80,30 +80,30 @@ func TestLoadNestedLoggingEnvironment(t *testing.T) {
 
 func TestLoadOperationTimeoutEnvironment(t *testing.T) {
 	got, err := load(ConfigFiles{}, []string{
-		"CLI_APP_TIMEOUTS_RESOURCE_STATUS=90s",
+		"CLI_APP_TIMEOUTS_DEMO_NOT_FOUND=90s",
 		"CLI_APP_TIMEOUTS_CLEANUP=3s",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Config.Timeouts.Resource.Status == nil || *got.Config.Timeouts.Resource.Status != 90*time.Second || got.Config.Timeouts.Cleanup != 3*time.Second {
+	if got.Config.Timeouts.Demo.NotFound == nil || *got.Config.Timeouts.Demo.NotFound != 90*time.Second || got.Config.Timeouts.Cleanup != 3*time.Second {
 		t.Fatalf("timeouts = %+v, want status 90s and cleanup 3s", got.Config.Timeouts)
 	}
 }
 
 func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
 	got, err := load(ConfigFiles{}, []string{
-		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_ATTEMPTS=4",
-		"CLI_APP_RETRY_RESOURCE_STATUS_INITIAL_DELAY=25ms",
-		"CLI_APP_RETRY_RESOURCE_STATUS_MAX_DELAY=2s",
-		"CLI_APP_RETRY_RESOURCE_STATUS_JITTER=0.3",
+		"CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_ATTEMPTS=4",
+		"CLI_APP_RETRY_DEMO_NOT_FOUND_INITIAL_DELAY=25ms",
+		"CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_DELAY=2s",
+		"CLI_APP_RETRY_DEMO_NOT_FOUND_JITTER=0.3",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := &RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
-	if got.Config.Retry.Resource.Status == nil || *got.Config.Retry.Resource.Status != *want {
-		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Resource.Status, want)
+	if got.Config.Retry.Demo.NotFound == nil || *got.Config.Retry.Demo.NotFound != *want {
+		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Demo.NotFound, want)
 	}
 }
 
@@ -116,7 +116,7 @@ func writeFile(t *testing.T, path, contents string) {
 
 func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
 	userPath := filepath.Join(t.TempDir(), "user.toml")
-	if err := os.WriteFile(userPath, []byte("[resource]\ncredential = 'op://file/item/field'\n"), 0o600); err != nil {
+	if err := os.WriteFile(userPath, []byte("[demo.secret_credential]\nreference = 'op://file/item/field'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, test := range []struct {
@@ -125,20 +125,20 @@ func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
 		want, from string
 	}{
 		{name: "file", want: "op://file/item/field", from: userPath},
-		{name: "environment", env: []string{"CLI_APP_RESOURCE_CREDENTIAL=op://env/item/field"}, want: "op://env/item/field", from: "CLI_APP_RESOURCE_CREDENTIAL"},
-		{name: "empty environment clears", env: []string{"CLI_APP_RESOURCE_CREDENTIAL="}, want: "", from: "CLI_APP_RESOURCE_CREDENTIAL"},
+		{name: "environment", env: []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE=op://env/item/field"}, want: "op://env/item/field", from: "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE"},
+		{name: "empty environment clears", env: []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE="}, want: "", from: "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := load(ConfigFiles{User: userPath}, test.env, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Config.Resource.Credential != test.want || got.Sources["resource.credential"] != Source(test.from) {
-				t.Fatalf("credential/source = %q/%q, want %q/%q", got.Config.Resource.Credential, got.Sources["resource.credential"], test.want, test.from)
+			if got.Config.Demo.SecretCredential.Reference != test.want || got.Sources["demo.secret_credential.reference"] != Source(test.from) {
+				t.Fatalf("credential/source = %q/%q, want %q/%q", got.Config.Demo.SecretCredential.Reference, got.Sources["demo.secret_credential.reference"], test.want, test.from)
 			}
 		})
 	}
-	if _, err := load(ConfigFiles{}, []string{"CLI_APP_RESOURCE_CREDENTIAL=hunter2"}, nil); err == nil || !strings.Contains(err.Error(), "resource.credential") {
-		t.Fatalf("load() error = %v, want a resource.credential validation error", err)
+	if _, err := load(ConfigFiles{}, []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE=hunter2"}, nil); err == nil || !strings.Contains(err.Error(), "demo.secret_credential.reference") {
+		t.Fatalf("load() error = %v, want a demo.secret_credential.reference validation error", err)
 	}
 }

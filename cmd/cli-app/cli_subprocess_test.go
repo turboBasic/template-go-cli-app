@@ -15,16 +15,16 @@ import (
 
 func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 	binary := buildCLIProcess(t, "")
-	stdout, stderr, code := runCLIProcess(t, binary, "resource", "list")
+	stdout, stderr, code := runCLIProcess(t, binary, "demo", "structured-output")
 	if code != 0 || stderr != "" || stdout != "NAME        STATUS\nexample-1   ready\nexample-2   pending\n" {
-		t.Fatalf("resource list = stdout %q, stderr %q, exit %d; want deterministic fixture output and exit 0", stdout, stderr, code)
+		t.Fatalf("demo structured-output = stdout %q, stderr %q, exit %d; want deterministic fixture output and exit 0", stdout, stderr, code)
 	}
-	stdout, stderr, code = runCLIProcess(t, binary, "resource", "status", "invalid", "--output", "json")
+	stdout, stderr, code = runCLIProcess(t, binary, "demo", "not-found", "invalid", "--output", "json")
 	if stdout != "" || code != 1 || strings.Count(stderr, "resource not found") != 1 {
 		t.Fatalf("invalid JSON command = stdout %q, stderr %q, exit %d; want empty stdout, diagnostic stderr, exit 1", stdout, stderr, code)
 	}
 
-	stdout, stderr, code = runCLIProcess(t, binary, "resource", "status", "example-1", "--output", "json")
+	stdout, stderr, code = runCLIProcess(t, binary, "demo", "not-found", "example-1", "--output", "json")
 	var result struct {
 		Name   string `json:"name"`
 		Status string `json:"status"`
@@ -39,7 +39,7 @@ func TestCLIProcessSeparatesJSONResultsAndDiagnostics(t *testing.T) {
 		t.Fatalf("successful JSON command = stderr %q, exit %d; want empty stderr and exit 0", stderr, code)
 	}
 
-	stdout, stderr, code = runCLIProcess(t, binary, "resource", "apply", "example-1", "--output", "json", "--log-level", "debug")
+	stdout, stderr, code = runCLIProcess(t, binary, "demo", "secret-credential", "example-1", "--output", "json", "--log-level", "debug")
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil || result != (struct {
 		Name   string `json:"name"`
 		Status string `json:"status"`
@@ -75,15 +75,15 @@ func TestCLIProcessOnePasswordReference(t *testing.T) {
 	}{
 		{name: "help needs no op", credential: reference, args: []string{"--help"}},
 		{name: "completion needs no op", credential: reference, args: []string{"completion", "bash"}},
-		{name: "apply without a reference needs no op", args: []string{"resource", "apply", "example-1"}},
+		{name: "apply without a reference needs no op", args: []string{"demo", "secret-credential", "example-1"}},
 		{name: "reference resolves through op", stub: "printf s3cr3t", credential: reference,
-			args: []string{"resource", "apply", "example-1"}, wantArgv: "read --no-newline " + reference + " "},
+			args: []string{"demo", "secret-credential", "example-1"}, wantArgv: "read --no-newline " + reference + " "},
 		{name: "signed-out op fails with the reference", stub: "echo '[ERROR] You are not currently signed in.' >&2; exit 1", credential: reference,
-			args: []string{"resource", "apply", "example-1"}, wantCode: 1, wantStderr: reference, wantArgv: "read --no-newline " + reference + " "},
+			args: []string{"demo", "secret-credential", "example-1"}, wantCode: 1, wantStderr: reference, wantArgv: "read --no-newline " + reference + " "},
 		{name: "missing op is reported", credential: reference,
-			args: []string{"resource", "apply", "example-1"}, wantCode: 1, wantStderr: "op is not installed"},
+			args: []string{"demo", "secret-credential", "example-1"}, wantCode: 1, wantStderr: "op is not installed"},
 		{name: "reference without a scheme is rejected before op runs", stub: "printf s3cr3t", credential: "vault/item/field",
-			args: []string{"resource", "apply", "example-1"}, wantCode: 2, wantStderr: "resource.credential"},
+			args: []string{"demo", "secret-credential", "example-1"}, wantCode: 2, wantStderr: "demo.secret_credential.reference"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -93,7 +93,7 @@ func TestCLIProcessOnePasswordReference(t *testing.T) {
 			}
 			env := []string{"PATH=" + pathDir}
 			if tt.credential != "" {
-				env = append(env, "CLI_APP_RESOURCE_CREDENTIAL="+tt.credential)
+				env = append(env, "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE="+tt.credential)
 			}
 			stdout, stderr, code := runCLIProcessEnv(t, binary, env, tt.args...)
 			if code != tt.wantCode || !strings.Contains(stderr, tt.wantStderr) {

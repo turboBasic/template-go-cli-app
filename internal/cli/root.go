@@ -132,9 +132,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
-		if cmd.Parent() != nil && cmd.Parent().Name() == "resource" && flags.Lookup("timeout").Changed {
-			key := "timeouts.resource." + cmd.Name()
-			flagValues[key] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
+		if name := demoTimeoutName(cmd); name != "" && flags.Lookup("timeout").Changed {
+			// long-running has no schema key, so the loader drops this overlay; it applies --timeout itself.
+			flagValues["timeouts.demo."+name] = config.FlagValue{Value: timeoutOverride, Changed: true, Source: "--timeout"}
 		}
 		loaded, err := config.Load(files, flagValues)
 		if err != nil {
@@ -168,7 +168,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			stopProgress = styled.Close
 			progressReporter = styled
 		}
-		if timeout := resourceOperationTimeout(cmd, loaded.Config.Timeouts.Resource); timeout != nil {
+		if timeout := demoOperationTimeout(cmd, loaded.Config.Timeouts.Demo); timeout != nil {
 			parentContext := cmd.Context()
 			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
 			cmd.SetContext(operationContext)
@@ -192,22 +192,13 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
 		return cleanup(cmd.Context())
 	}
-	resource := &cobra.Command{Use: "resource", Short: "Manage resources"}
-	rejectUnknownSubcommands(resource)
 	getResources := func() *app.ResourceService { return resources }
 	getRenderer := func() output.Renderer { return renderer }
-	list := newResourceListCommand(getResources, getRenderer)
-	status := newResourceStatusCommand(getResources, getRenderer, names)
-	apply := newResourceApplyCommand(getResources, getRenderer, names)
-	closeAfterRun(list, cleanup)
-	closeAfterRun(status, cleanup)
-	closeAfterRun(apply, cleanup)
-	resource.AddCommand(list, status, apply)
-	demo := newDemoCommand(getResources)
+	demo := newDemoCommand(getResources, getRenderer, names)
 	for _, command := range demo.Commands() {
 		closeAfterRun(command, cleanup)
 	}
-	root.AddCommand(resource, demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
+	root.AddCommand(demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})
@@ -232,17 +223,22 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 }
 
-func resourceOperationTimeout(cmd *cobra.Command, timeouts config.ResourceTimeouts) *time.Duration {
-	if cmd.Parent() == nil || cmd.Parent().Name() != "resource" {
-		return nil
+// demoTimeoutName is the last element of a demo command's timeouts.demo.<name> key, or "" outside the group.
+func demoTimeoutName(cmd *cobra.Command) string {
+	if cmd.Parent() == nil || cmd.Parent().Name() != "demo" {
+		return ""
 	}
-	switch cmd.Name() {
-	case "list":
-		return timeouts.List
-	case "status":
-		return timeouts.Status
-	case "apply":
-		return timeouts.Apply
+	return strings.ReplaceAll(cmd.Name(), "-", "_")
+}
+
+func demoOperationTimeout(cmd *cobra.Command, timeouts config.DemoTimeouts) *time.Duration {
+	switch demoTimeoutName(cmd) {
+	case "structured_output":
+		return timeouts.StructuredOutput
+	case "not_found":
+		return timeouts.NotFound
+	case "secret_credential":
+		return timeouts.SecretCredential
 	default:
 		return nil
 	}
@@ -285,11 +281,14 @@ func isHelpOrCompletion(cmd *cobra.Command) bool {
 	return false
 }
 
-func newResourceListCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
+func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List resources",
-		Args:  validationArgs(cobra.NoArgs),
+		Use:   "structured-output",
+		Short: "Demonstrate text and JSON results written to stdout",
+		Long: "Demonstrates the result contract: the resource list is a human table by default and a JSON array with\n" +
+			"--output json, always on stdout. Look at the split: redirect stdout and only the result arrives, with no\n" +
+			"progress or diagnostics mixed in.",
+		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			items, err := getResources().List(cmd.Context())
 			if err != nil {
@@ -300,10 +299,12 @@ func newResourceListCommand(getResources func() *app.ResourceService, getRendere
 	}
 }
 
-func newResourceStatusCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
+func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "status <name>",
-		Short:             "Show a resource status",
+		Use:   "not-found <name>",
+		Short: "Demonstrate an actionable not-found error with shell completion of names",
+		Long: "Demonstrates the error contract: an unknown name fails with exit 1 and a message that names it and lists the\n" +
+			"known names. Look at the message, then press Tab after the command: the shell completes the known names.",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -316,10 +317,13 @@ func newResourceStatusCommand(getResources func() *app.ResourceService, getRende
 	}
 }
 
-func newResourceApplyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
+func newDemoSecretCredentialCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "apply <name>",
-		Short:             "Apply a resource",
+		Use:   "secret-credential <name>",
+		Short: "Demonstrate a secret reference resolved at run time and never printed",
+		Long: "Demonstrates the secret contract: set demo.secret_credential.reference (or\n" +
+			"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE) to a scheme://reference such as an op:// item. The reference is\n" +
+			"resolved only when this command runs, and the secret value never reaches output, logs or `config show`.",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -334,7 +338,7 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, getRender
 
 // newDemoCommand groups the template's demonstrations of its contracts. An application built from the
 // template deletes the group, and every demo with it.
-func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
+func newDemoCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	demo := &cobra.Command{
 		Use:   "demo",
 		Short: "Demonstrations of the template's contracts; delete this group in your application",
@@ -342,6 +346,7 @@ func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
 			"They are not part of an application built from the template: delete this group, and the code it calls.",
 	}
 	rejectUnknownSubcommands(demo)
+	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names))
 	demo.AddCommand(&cobra.Command{
 		Use:   "long-running",
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",

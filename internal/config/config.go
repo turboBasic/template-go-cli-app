@@ -9,29 +9,34 @@ import (
 
 // Config contains the supported Stage 1 application settings.
 type Config struct {
-	Log      LogConfig      `koanf:"log"`
-	Output   string         `koanf:"output"`
-	Color    string         `koanf:"color"`
-	Quiet    bool           `koanf:"quiet"`
-	Timeouts TimeoutConfig  `koanf:"timeouts"`
-	Retry    RetryConfig    `koanf:"retry"`
-	Resource ResourceConfig `koanf:"resource"`
+	Log      LogConfig     `koanf:"log"`
+	Output   string        `koanf:"output"`
+	Color    string        `koanf:"color"`
+	Quiet    bool          `koanf:"quiet"`
+	Timeouts TimeoutConfig `koanf:"timeouts"`
+	Retry    RetryConfig   `koanf:"retry"`
+	Demo     DemoConfig    `koanf:"demo"`
 }
 
-// ResourceConfig holds settings for resource operations.
-type ResourceConfig struct {
-	// Credential is a secret reference such as op://vault/item/field, never the secret itself.
-	Credential string `koanf:"credential"`
+// DemoConfig holds settings for the reference demo commands.
+type DemoConfig struct {
+	SecretCredential SecretCredentialConfig `koanf:"secret_credential"`
+}
+
+// SecretCredentialConfig holds settings for the secret-credential demo.
+type SecretCredentialConfig struct {
+	// Reference is a secret reference such as op://vault/item/field, never the secret itself.
+	Reference string `koanf:"reference"`
 }
 
 // RetryConfig holds opt-in policies for individually approved operations.
 type RetryConfig struct {
-	Resource ResourceRetryConfig `koanf:"resource"`
+	Demo DemoRetryConfig `koanf:"demo"`
 }
 
-// ResourceRetryConfig holds retry policies for resource operations.
-type ResourceRetryConfig struct {
-	Status *RetryPolicyConfig `koanf:"status"`
+// DemoRetryConfig holds retry policies for the reference demo commands.
+type DemoRetryConfig struct {
+	NotFound *RetryPolicyConfig `koanf:"not_found"`
 }
 
 // RetryPolicyConfig is a bounded retry policy for one configured operation.
@@ -44,15 +49,15 @@ type RetryPolicyConfig struct {
 
 // TimeoutConfig defines per-operation timeouts and the dependency cleanup bound.
 type TimeoutConfig struct {
-	Cleanup  time.Duration    `koanf:"cleanup"`
-	Resource ResourceTimeouts `koanf:"resource"`
+	Cleanup time.Duration `koanf:"cleanup"`
+	Demo    DemoTimeouts  `koanf:"demo"`
 }
 
-// ResourceTimeouts configures timeouts for resource use cases.
-type ResourceTimeouts struct {
-	List   *time.Duration `koanf:"list"`
-	Status *time.Duration `koanf:"status"`
-	Apply  *time.Duration `koanf:"apply"`
+// DemoTimeouts configures timeouts for the reference demo commands.
+type DemoTimeouts struct {
+	StructuredOutput *time.Duration `koanf:"structured_output"`
+	NotFound         *time.Duration `koanf:"not_found"`
+	SecretCredential *time.Duration `koanf:"secret_credential"`
 }
 
 // LogConfig contains the settings for local log destinations.
@@ -99,29 +104,29 @@ func (c Config) Validate() error {
 		key     string
 		timeout *time.Duration
 	}{
-		{key: "timeouts.resource.list", timeout: c.Timeouts.Resource.List},
-		{key: "timeouts.resource.status", timeout: c.Timeouts.Resource.Status},
-		{key: "timeouts.resource.apply", timeout: c.Timeouts.Resource.Apply},
+		{key: "timeouts.demo.structured_output", timeout: c.Timeouts.Demo.StructuredOutput},
+		{key: "timeouts.demo.not_found", timeout: c.Timeouts.Demo.NotFound},
+		{key: "timeouts.demo.secret_credential", timeout: c.Timeouts.Demo.SecretCredential},
 	} {
 		if setting.timeout != nil && *setting.timeout <= 0 {
 			return fmt.Errorf("invalid %s %s: must be positive", setting.key, *setting.timeout)
 		}
 	}
-	if c.Retry.Resource.Status != nil {
-		policy := c.Retry.Resource.Status
+	if c.Retry.Demo.NotFound != nil {
+		policy := c.Retry.Demo.NotFound
 		if policy.MaxAttempts < 1 {
-			return fmt.Errorf("invalid retry.resource.status.max_attempts: must be positive")
+			return fmt.Errorf("invalid retry.demo.not_found.max_attempts: must be positive")
 		}
 		if policy.InitialDelay < 0 || policy.MaxDelay < 0 || (policy.MaxAttempts > 1 && (policy.InitialDelay == 0 || policy.MaxDelay < policy.InitialDelay)) {
-			return fmt.Errorf("invalid retry.resource.status delays: require 0 < initial <= max for multiple attempts")
+			return fmt.Errorf("invalid retry.demo.not_found delays: require 0 < initial <= max for multiple attempts")
 		}
 		if math.IsNaN(policy.Jitter) || policy.Jitter < 0 || policy.Jitter > 1 {
-			return fmt.Errorf("invalid retry.resource.status.jitter: must be between 0 and 1")
+			return fmt.Errorf("invalid retry.demo.not_found.jitter: must be between 0 and 1")
 		}
 	}
-	if ref := c.Resource.Credential; ref != "" {
+	if ref := c.Demo.SecretCredential.Reference; ref != "" {
 		if scheme, rest, ok := strings.Cut(ref, "://"); !ok || scheme == "" || rest == "" {
-			return fmt.Errorf("invalid resource.credential: must be a scheme://reference, not the secret itself")
+			return fmt.Errorf("invalid demo.secret_credential.reference: must be a scheme://reference, not the secret itself")
 		}
 	}
 	return nil

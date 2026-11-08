@@ -178,8 +178,8 @@ func TestConfigShowMasksSensitiveValues(t *testing.T) {
 
 func TestConfigShowCredentialReferenceIsNotMasked(t *testing.T) {
 	_, _, newCommand := configShowFixture(t)
-	t.Setenv("CLI_APP_RESOURCE_CREDENTIAL", "op://vault/item/field")
-	command, out := newCommand("--output", "json", "config", "show", "resource.credential")
+	t.Setenv("CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE", "op://vault/item/field")
+	command, out := newCommand("--output", "json", "config", "show", "demo.secret_credential.reference")
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestConfigShowCredentialReferenceIsNotMasked(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Key != "resource.credential" || rows[0].Source != "environment variable" {
+	if len(rows) != 1 || rows[0].Key != "demo.secret_credential.reference" || rows[0].Source != "environment variable" {
 		t.Fatalf("rows = %+v, want one environment row", rows)
 	}
 	if got := out.String(); !strings.Contains(got, "op://vault/item/field") || strings.Contains(got, "[REDACTED]") {

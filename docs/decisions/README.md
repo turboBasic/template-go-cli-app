@@ -18,12 +18,13 @@ Accepted decisions for the [architecture specification][architecture-specificati
 | [ADR-0012: Errors, cancellation, cleanup and retries][ADR-0012]                             | accepted   |
 | [ADR-0014: Versioning and release automation][ADR-0014]                                     | accepted   |
 | [ADR-0015: Template setup and developer tooling][ADR-0015]                                  | accepted   |
-| [ADR-0016: Reference application][ADR-0016]                                                 | accepted   |
+| [ADR-0016: Reference application][ADR-0016]                                                 | superseded |
 | [ADR-0017: Configuration provenance and inspection][ADR-0017]                               | accepted   |
 | [ADR-0018: Secret provider and resolution][ADR-0018]                                        | accepted   |
 | [ADR-0019: Supply-chain security and distribution][ADR-0019]                                | accepted   |
 | [ADR-0020: Stage definitions of done and scope freeze][ADR-0020]                            | superseded |
 | [ADR-0021: The template carries the minimum code that demonstrates each contract][ADR-0021] | accepted   |
+| [ADR-0022: Reference commands are demos named for the contract they demonstrate][ADR-0022]  | accepted   |
 
 ## Source and rationale note
 
@@ -50,3 +51,4 @@ This export is grounded in the retrieved final specification, accepted ADR regis
 [ADR-0019]: 0019-supply-chain-security-and-distribution.md
 [ADR-0020]: 0020-stage-definitions-of-done-and-scope-freeze.md
 [ADR-0021]: 0021-the-template-carries-the-minimum-code-that-demonstrates-each-contract.md
+[ADR-0022]: 0022-reference-commands-are-demos-named-for-their-contract.md

@@ -82,22 +82,22 @@ func environmentKey(name string) string {
 		return "log.file.path"
 	case "CLI_APP_TIMEOUTS_CLEANUP":
 		return "timeouts.cleanup"
-	case "CLI_APP_TIMEOUTS_RESOURCE_LIST":
-		return "timeouts.resource.list"
-	case "CLI_APP_TIMEOUTS_RESOURCE_STATUS":
-		return "timeouts.resource.status"
-	case "CLI_APP_TIMEOUTS_RESOURCE_APPLY":
-		return "timeouts.resource.apply"
-	case "CLI_APP_RETRY_RESOURCE_STATUS_MAX_ATTEMPTS":
-		return "retry.resource.status.max_attempts"
-	case "CLI_APP_RETRY_RESOURCE_STATUS_INITIAL_DELAY":
-		return "retry.resource.status.initial_delay"
-	case "CLI_APP_RETRY_RESOURCE_STATUS_MAX_DELAY":
-		return "retry.resource.status.max_delay"
-	case "CLI_APP_RETRY_RESOURCE_STATUS_JITTER":
-		return "retry.resource.status.jitter"
-	case "CLI_APP_RESOURCE_CREDENTIAL":
-		return "resource.credential"
+	case "CLI_APP_TIMEOUTS_DEMO_STRUCTURED_OUTPUT":
+		return "timeouts.demo.structured_output"
+	case "CLI_APP_TIMEOUTS_DEMO_NOT_FOUND":
+		return "timeouts.demo.not_found"
+	case "CLI_APP_TIMEOUTS_DEMO_SECRET_CREDENTIAL":
+		return "timeouts.demo.secret_credential"
+	case "CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_ATTEMPTS":
+		return "retry.demo.not_found.max_attempts"
+	case "CLI_APP_RETRY_DEMO_NOT_FOUND_INITIAL_DELAY":
+		return "retry.demo.not_found.initial_delay"
+	case "CLI_APP_RETRY_DEMO_NOT_FOUND_MAX_DELAY":
+		return "retry.demo.not_found.max_delay"
+	case "CLI_APP_RETRY_DEMO_NOT_FOUND_JITTER":
+		return "retry.demo.not_found.jitter"
+	case "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE":
+		return "demo.secret_credential.reference"
 	default:
 		return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(name, "CLI_APP_"), "_", "-"))
 	}

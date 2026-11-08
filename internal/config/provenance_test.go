@@ -37,8 +37,8 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 	if got := entries["timeouts.cleanup"].Value; got != "5s" {
 		t.Errorf("timeouts.cleanup value = %#v, want \"5s\"", got)
 	}
-	if _, ok := entries["timeouts.resource.list"]; ok {
-		t.Error("unset timeouts.resource.list has an entry")
+	if _, ok := entries["timeouts.demo.structured_output"]; ok {
+		t.Error("unset timeouts.demo.structured_output has an entry")
 	}
 }
 

@@ -1,11 +1,14 @@
 ---
 id: "0016"
-status: accepted
+status: superseded
+superseded_by: "0022"
 date: 2026-10-31
 scope: architecture
 ---
 
 # ADR 0016 — Reference application
+
+> Superseded by [ADR 0022](0022-reference-commands-are-demos-named-for-their-contract.md).
 
 ## Decision
 

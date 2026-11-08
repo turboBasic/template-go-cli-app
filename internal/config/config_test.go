@@ -24,15 +24,15 @@ func TestTimeoutDefaultsAndValidation(t *testing.T) {
 	if defaults.Timeouts.Cleanup != 5*time.Second {
 		t.Fatalf("cleanup timeout = %s, want 5s", defaults.Timeouts.Cleanup)
 	}
-	if defaults.Timeouts.Resource.List != nil || defaults.Timeouts.Resource.Status != nil || defaults.Timeouts.Resource.Apply != nil {
-		t.Fatalf("operation timeouts = %+v, want disabled defaults", defaults.Timeouts.Resource)
+	if defaults.Timeouts.Demo.StructuredOutput != nil || defaults.Timeouts.Demo.NotFound != nil || defaults.Timeouts.Demo.SecretCredential != nil {
+		t.Fatalf("operation timeouts = %+v, want disabled defaults", defaults.Timeouts.Demo)
 	}
 	for _, test := range []struct {
 		name string
 		edit func(*Config)
 	}{
-		{name: "zero operation timeout", edit: func(c *Config) { timeout := time.Duration(0); c.Timeouts.Resource.List = &timeout }},
-		{name: "negative operation timeout", edit: func(c *Config) { timeout := -time.Second; c.Timeouts.Resource.Apply = &timeout }},
+		{name: "zero operation timeout", edit: func(c *Config) { timeout := time.Duration(0); c.Timeouts.Demo.StructuredOutput = &timeout }},
+		{name: "negative operation timeout", edit: func(c *Config) { timeout := -time.Second; c.Timeouts.Demo.SecretCredential = &timeout }},
 		{name: "zero cleanup timeout", edit: func(c *Config) { c.Timeouts.Cleanup = 0 }},
 		{name: "negative cleanup timeout", edit: func(c *Config) { c.Timeouts.Cleanup = -time.Second }},
 	} {
@@ -82,13 +82,13 @@ func TestCredentialValidate(t *testing.T) {
 	}{
 		{name: "empty", value: ""},
 		{name: "reference", value: "op://vault/item/field"},
-		{name: "plain secret", value: "hunter2", want: "resource.credential"},
-		{name: "scheme only", value: "op://", want: "resource.credential"},
-		{name: "rest only", value: "://x", want: "resource.credential"},
+		{name: "plain secret", value: "hunter2", want: "demo.secret_credential.reference"},
+		{name: "scheme only", value: "op://", want: "demo.secret_credential.reference"},
+		{name: "rest only", value: "://x", want: "demo.secret_credential.reference"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := Defaults()
-			config.Resource.Credential = test.value
+			config.Demo.SecretCredential.Reference = test.value
 			err := config.Validate()
 			if test.want == "" && err != nil {
 				t.Fatalf("Validate() error = %v", err)

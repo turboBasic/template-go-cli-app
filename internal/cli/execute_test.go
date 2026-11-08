@@ -59,7 +59,7 @@ func TestExecuteKeepsStage1RootFeatures(t *testing.T) {
 
 func TestExecuteHelpAndCompletionSkipFactory(t *testing.T) {
 	setupConfigEnvironment(t)
-	for _, args := range [][]string{{"--help"}, {"help"}, {"completion", "bash"}, {"__complete", "resource", ""}} {
+	for _, args := range [][]string{{"--help"}, {"help"}, {"completion", "bash"}, {"__complete", "demo", ""}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
 			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
@@ -128,13 +128,13 @@ func TestGroupsRejectUnknownSubcommandsButBareGroupsShowHelp(t *testing.T) {
 		return command, &calls
 	}
 
-	for _, args := range [][]string{{"nope"}, {"resource", "nope"}, {"completion", "nope"}} {
+	for _, args := range [][]string{{"nope"}, {"demo", "nope"}, {"completion", "nope"}} {
 		command, calls := newCommand(args...)
 		if err := Execute(context.Background(), command); !errors.Is(err, app.ErrValidation) || !strings.Contains(err.Error(), `unknown command "nope"`) || *calls != 0 {
 			t.Fatalf("Execute(%v) = %v, factory calls %d; want a validation error and no factory call", args, err, *calls)
 		}
 	}
-	for _, args := range [][]string{nil, {"--output", "xml"}, {"resource"}, {"completion"}} {
+	for _, args := range [][]string{nil, {"--output", "xml"}, {"demo"}, {"completion"}} {
 		command, calls := newCommand(args...)
 		var out bytes.Buffer
 		command.SetOut(&out)
@@ -212,10 +212,10 @@ func TestHelpIsStyledOnlyWhenColorIsForced(t *testing.T) {
 				args []string
 				want []string
 			}{
-				{[]string{"--help"}, []string{"resource", "completion", "--output"}},
-				{[]string{"resource", "--help"}, []string{"list", "status", "apply"}},
-				{[]string{"resource", "status", "--help"}, []string{"status", "--output"}},
-				{[]string{"help", "resource"}, []string{"list", "status", "apply"}},
+				{[]string{"--help"}, []string{"demo", "completion", "--output"}},
+				{[]string{"demo", "--help"}, []string{"structured-output", "not-found", "secret-credential"}},
+				{[]string{"demo", "not-found", "--help"}, []string{"not-found", "--output"}},
+				{[]string{"help", "demo"}, []string{"structured-output", "not-found", "secret-credential"}},
 			} {
 				t.Run(strings.Join(test.args, "_"), func(t *testing.T) {
 					var stdout, stderr bytes.Buffer
