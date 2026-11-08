@@ -203,7 +203,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	closeAfterRun(status, cleanup)
 	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
-	root.AddCommand(resource, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
+	demo := newDemoCommand(getResources)
+	closeAfterRun(demo.Commands()[0], cleanup)
+	root.AddCommand(resource, demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})
@@ -326,6 +328,33 @@ func newResourceApplyCommand(getResources func() *app.ResourceService, getRender
 			return getRenderer().RenderResource(resource)
 		},
 	}
+}
+
+// newDemoCommand groups the template's demonstrations of its contracts. An application built from the
+// template deletes the group, and every demo with it.
+func newDemoCommand(getResources func() *app.ResourceService) *cobra.Command {
+	demo := &cobra.Command{
+		Use:   "demo",
+		Short: "Demonstrations of the template's contracts; delete this group in your application",
+		Long: "Demonstrations of the template's contracts, kept so a developer can see each one working and copy it.\n" +
+			"They are not part of an application built from the template: delete this group, and the code it calls.",
+	}
+	rejectUnknownSubcommands(demo)
+	demo.AddCommand(&cobra.Command{
+		Use:   "long-running",
+		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
+		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
+			"color-capable terminal shows a bar that fills. Redirected stderr, --output json and --quiet keep plain lines or\n" +
+			"silence. The length is fixed in the template; press Ctrl-C to cancel.",
+		Args: validationArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("timeout") {
+				return app.Classify(app.ErrValidation, errors.New("demo long-running has a fixed length; --timeout does not apply"))
+			}
+			return getResources().LongRunning(cmd.Context())
+		},
+	})
+	return demo
 }
 
 func completeResourceNames(names []string) cobra.CompletionFunc {
