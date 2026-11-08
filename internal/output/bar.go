@@ -26,10 +26,10 @@ type frameMsg struct{}
 // so the fill keeps moving between steps instead of jumping a cell at a time. The fill blends
 // purple to pink across the bar, so the color shows how far the work has come.
 type barModel struct {
-	fills                  []color.Color
-	spring                 harmonica.Spring
-	shown, velocity, going float64 // going is the target fraction
-	ticking                bool
+	fills                   []color.Color
+	spring                  harmonica.Spring
+	shown, velocity, target float64
+	ticking                 bool
 }
 
 func newBar() barModel {
@@ -67,7 +67,7 @@ func (b barModel) view() string { return b.viewAs(b.shown) }
 
 // setTarget moves the glide's target and starts its frames unless they are already running.
 func (b *barModel) setTarget(fraction float64) tea.Cmd {
-	b.going = fraction
+	b.target = fraction
 	if b.ticking {
 		return nil
 	}
@@ -77,9 +77,10 @@ func (b *barModel) setTarget(fraction float64) tea.Cmd {
 
 // frame advances the glide one step, and stops the frames once it has settled on the target.
 func (b *barModel) frame() tea.Cmd {
-	b.shown, b.velocity = b.spring.Update(b.shown, b.velocity, b.going)
-	if math.Abs(b.shown-b.going) < 0.0005 && math.Abs(b.velocity) < 0.01 {
-		b.shown, b.velocity, b.ticking = b.going, 0, false
+	b.shown, b.velocity = b.spring.Update(b.shown, b.velocity, b.target)
+	// 0.0005 is a fifth of an eighth of a cell, so the final snap onto the target cannot be seen.
+	if math.Abs(b.shown-b.target) < 0.0005 && math.Abs(b.velocity) < 0.01 {
+		b.shown, b.velocity, b.ticking = b.target, 0, false
 		return nil
 	}
 	return frameTick()

@@ -17,9 +17,9 @@ func WithLongRunningDuration(duration time.Duration) ResourceOption {
 }
 
 // LongRunning is a demonstration of determinate progress: it counts longRunningSteps steps across the
-// configured duration, reporting each one with Current and Total, then completion. A hundred steps of 1%
-// keep the bar moving smoothly. A real application
-// replaces it with its own counted work and deletes this demo.
+// configured duration, reporting each one with Current and Total, then completion. A hundred steps
+// of 1% keep the bar moving smoothly. A real application replaces it with its own counted work and
+// deletes this demo.
 func (s *ResourceService) LongRunning(ctx context.Context) error {
 	s.logger.DebugContext(ctx, "running the long-running demo")
 	if err := ctx.Err(); err != nil {

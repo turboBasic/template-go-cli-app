@@ -147,7 +147,7 @@ func TestSpinnerModelBar(t *testing.T) {
 	t.Run("a counted label targets Current/Total and starts the glide", func(t *testing.T) {
 		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
 		model := updated.(spinnerModel)
-		if got := model.bar.going; got != 0.5 || cmd == nil {
+		if got := model.bar.target; got != 0.5 || cmd == nil {
 			t.Fatalf("target = %v, command = %v; want 0.5 and a frame command", got, cmd)
 		}
 		if got, want := stripANSI(model.View().Content), barOf(0)+"   0% working Working (10/20)"; got != want {
@@ -162,6 +162,20 @@ func TestSpinnerModelBar(t *testing.T) {
 		}
 		if got, want := stripANSI(model.View().Content), barOf(25)+"  50% working Working (10/20)"; got != want {
 			t.Fatalf("view after the glide = %q, want %q", got, want)
+		}
+		if cmd != nil || model.bar.ticking {
+			t.Fatalf("command = %v, ticking = %t; want the frames stopped once the glide settled", cmd, model.bar.ticking)
+		}
+	})
+
+	t.Run("a second label mid-glide retargets without a second frame chain", func(t *testing.T) {
+		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
+		if cmd == nil {
+			t.Fatal("first counted label returned no frame command")
+		}
+		updated, cmd = updated.Update(labelFor(app.ProgressEvent{Phase: "working", Current: 11, Total: 20, Message: "Working"}))
+		if got := updated.(spinnerModel).bar.target; got != 0.55 || cmd != nil {
+			t.Fatalf("target = %v, command = %v; want 0.55 and no new frame command", got, cmd)
 		}
 	})
 
