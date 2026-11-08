@@ -951,7 +951,7 @@ func TestDemoLongRunningProgress(t *testing.T) {
 				}
 			default:
 				plain := ansi.ReplaceAllString(got, "")
-				if !strings.Contains(got, "\x1b[") || !strings.Contains(plain, strings.Repeat("█", 4)+strings.Repeat("░", 46)+"   7% working Working (7/100)\n") || !strings.HasSuffix(plain, "✓ Long-running demo complete (100/100)\n") {
+				if !strings.Contains(got, "\x1b[") || !strings.Contains(plain, "███▌"+strings.Repeat("░", 46)+"   7% working Working (7/100)\n") || !strings.HasSuffix(plain, "✓ Long-running demo complete (100/100)\n") {
 					t.Fatalf("stderr = %q, want the bar at 7%% and the completion line last", got)
 				}
 			}

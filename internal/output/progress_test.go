@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
+	"github.com/charmbracelet/harmonica"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
@@ -139,21 +140,21 @@ func TestStyledProgressReporterBar(t *testing.T) {
 func TestSpinnerModelBar(t *testing.T) {
 	newModel := func() spinnerModel {
 		model := spinnerModel{spinner: spinner.New(), bar: newBar(), styles: newStyles()}
-		model.bar.SetSpringOptions(200, 1) // settles in a few frames, so the test stays quick
+		model.bar.spring = harmonica.NewSpring(harmonica.FPS(barFPS), 200, 1) // settles in a few frames, so the test stays quick
 		return model
 	}
 
 	t.Run("a counted label targets Current/Total and starts the glide", func(t *testing.T) {
 		updated, cmd := newModel().Update(labelFor(app.ProgressEvent{Phase: "working", Current: 10, Total: 20, Message: "Working"}))
 		model := updated.(spinnerModel)
-		if got := model.bar.Percent(); got != 0.5 || cmd == nil {
+		if got := model.bar.going; got != 0.5 || cmd == nil {
 			t.Fatalf("target = %v, command = %v; want 0.5 and a frame command", got, cmd)
 		}
 		if got, want := stripANSI(model.View().Content), barOf(0)+"   0% working Working (10/20)"; got != want {
 			t.Fatalf("view before any frame = %q, want %q (no jump)", got, want)
 		}
 		for range 200 {
-			if !model.bar.IsAnimating() {
+			if !model.bar.ticking {
 				break
 			}
 			next, frameCmd := model.Update(cmd())
@@ -310,4 +311,26 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write fa
 // barOf is the bar text with filled of its barCells cells filled.
 func barOf(filled int) string {
 	return strings.Repeat("█", filled) + strings.Repeat("░", barCells-filled)
+}
+
+func TestBarMovesInEighthsOfACell(t *testing.T) {
+	bar := newBar()
+	for _, test := range []struct {
+		name     string
+		fraction float64
+		want     string
+	}{
+		{name: "empty", fraction: 0, want: barOf(0) + "   0%"},
+		{name: "a whole number of cells has no partial glyph", fraction: 0.5, want: barOf(25) + "  50%"},
+		{name: "three eighths of the third cell", fraction: (2*8 + 3) / float64(barCells*8), want: "██▍" + strings.Repeat("░", barCells-3) + "   5%"},
+		{name: "seven eighths", fraction: 7 / float64(barCells*8), want: "▉" + strings.Repeat("░", barCells-1) + "   2%"},
+		{name: "full", fraction: 1, want: barOf(barCells) + " 100%"},
+		{name: "out of range is clamped", fraction: 1.5, want: barOf(barCells) + " 100%"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := stripANSI(bar.viewAs(test.fraction)); got != test.want {
+				t.Fatalf("viewAs(%v) = %q, want %q", test.fraction, got, test.want)
+			}
+		})
+	}
 }

@@ -5,10 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
@@ -47,7 +45,7 @@ type StyledProgressReporter struct {
 	mu      sync.Mutex
 	writer  io.Writer
 	styles  styles
-	bar     progress.Model
+	bar     barModel
 	animate bool         // false once stopped, so completion is never followed by a new spinner
 	program *tea.Program // nil until the first progress event and after stopping
 	done    chan struct{}
@@ -132,7 +130,7 @@ type stopMsg struct{}
 // nothing on screen once stopped.
 type spinnerModel struct {
 	spinner        spinner.Model
-	bar            progress.Model
+	bar            barModel
 	styles         styles
 	phase          string
 	detail         string
@@ -147,13 +145,11 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case labelMsg:
 		m.phase, m.detail, m.current, m.total = msg.phase, msg.detail, msg.current, msg.total
 		if m.total > 0 {
-			return m, m.bar.SetPercent(fraction(m.current, m.total))
+			return m, m.bar.setTarget(fraction(m.current, m.total))
 		}
 		return m, nil
-	case progress.FrameMsg:
-		var cmd tea.Cmd
-		m.bar, cmd = m.bar.Update(msg)
-		return m, cmd
+	case frameMsg:
+		return m, m.bar.frame()
 	case stopMsg:
 		m.stopped = true
 		return m, tea.Quit
@@ -169,7 +165,7 @@ func (m spinnerModel) View() tea.View {
 	}
 	lead := m.spinner.View()
 	if m.total > 0 {
-		lead = m.bar.View()
+		lead = m.bar.view()
 	}
 	return tea.NewView(lead + " " + m.styles.phase.Render(m.phase) + " " + m.styles.detail.Render(m.detail))
 }
@@ -181,24 +177,9 @@ func (r *StyledProgressReporter) styledLine(event app.ProgressEvent) string {
 	}
 	line := r.styles.phase.Render(event.Phase) + " " + r.styles.detail.Render(detail) + "\n"
 	if event.Total > 0 {
-		return r.bar.ViewAs(fraction(event.Current, event.Total)) + " " + line
+		return r.bar.viewAs(fraction(event.Current, event.Total)) + " " + line
 	}
 	return line
-}
-
-const (
-	barCells     = 50
-	percentCells = len(" 100%") // the model counts its percentage text in the width
-)
-
-// newBar returns a bar of barCells cells and a percentage, filled with the Bubbles default blend
-// (purple to pink) so the colour shows how far the work has come. Full blocks keep one cell per
-// step; the empty cells are a plain grey because the model colours them and cannot be Faint.
-func newBar() progress.Model {
-	// A soft spring (frequency 8) keeps the fill moving until the next step arrives.
-	bar := progress.New(progress.WithDefaultBlend(), progress.WithFillCharacters('█', '░'), progress.WithWidth(barCells+percentCells), progress.WithSpringOptions(8, 1))
-	bar.EmptyColor = lipgloss.Color("8")
-	return bar
 }
 
 func fraction(current, total int) float64 { return float64(current) / float64(total) }
