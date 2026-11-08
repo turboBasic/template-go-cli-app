@@ -50,7 +50,8 @@ homebrew_casks:
   - repository:
       owner: '{{ index .Env "GITHUB_REPOSITORY_OWNER" }}'
       name: homebrew-tap
-      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+      # GoReleaser accepts only the bare form here; it is read only when skip_upload is false.
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
     homepage: 'https://github.com/{{ index .Env "GITHUB_REPOSITORY" }}'
     description: '{{ .ProjectName }} command-line tool'
     caveats: |
