@@ -216,7 +216,7 @@ func TestPersistentColorFlagContract(t *testing.T) {
 	if flag.DefValue != "auto" {
 		t.Errorf("--color default = %q, want auto", flag.DefValue)
 	}
-	if want := "result color mode (auto, always, never)"; flag.Usage != want {
+	if want := "color mode for results and progress (auto, always, never)"; flag.Usage != want {
 		t.Errorf("--color usage = %q, want %q", flag.Usage, want)
 	}
 }

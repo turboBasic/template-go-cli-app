@@ -61,7 +61,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&configPath, "config", "", "configuration file path")
 	flags.StringVar(&logLevel, "log-level", "warn", "logging level (debug, info, warn, error)")
 	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
-	flags.StringVar(&color, "color", "auto", "result color mode (auto, always, never)")
+	flags.StringVar(&color, "color", "auto", "color mode for results and progress (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected operation")
 	var resources *app.ResourceService
