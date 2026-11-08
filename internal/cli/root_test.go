@@ -23,7 +23,6 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 func TestResourceListCommand(t *testing.T) {
@@ -730,7 +729,7 @@ func (failingResourceReader) Status(context.Context, string) (domain.Resource, e
 	return domain.Resource{}, errors.New("injected reader failure")
 }
 
-func (failingResourceReader) Apply(context.Context, string, logging.Secret) (domain.Resource, error) {
+func (failingResourceReader) Apply(context.Context, string, app.Secret) (domain.Resource, error) {
 	return domain.Resource{}, errors.New("injected reader failure")
 }
 
@@ -868,7 +867,7 @@ func newTestRootCommand(t *testing.T) *cobra.Command {
 
 type countingResolver struct{ calls int }
 
-func (r *countingResolver) Resolve(context.Context, string) (logging.Secret, error) {
+func (r *countingResolver) Resolve(context.Context, string) (app.Secret, error) {
 	r.calls++
 	return "resolved-secret", nil
 }

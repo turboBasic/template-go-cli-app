@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
-	"github.com/turboBasic/template-go-cli-app/internal/logging"
 )
 
 // ResourceReader supplies resources to application use cases.
 type ResourceReader interface {
 	List(context.Context) ([]domain.Resource, error)
 	Status(context.Context, string) (domain.Resource, error)
-	Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error)
+	Apply(ctx context.Context, name string, credential Secret) (domain.Resource, error)
 }
 
 // Status returns the named resource and its current status.
@@ -67,7 +66,7 @@ func (s *ResourceService) Apply(ctx context.Context, name string) (domain.Resour
 }
 
 // resolveCredential resolves the configured reference once, only when one is set.
-func (s *ResourceService) resolveCredential(ctx context.Context) (logging.Secret, error) {
+func (s *ResourceService) resolveCredential(ctx context.Context) (Secret, error) {
 	if s.credentialRef == "" {
 		return "", nil
 	}
