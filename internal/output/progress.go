@@ -10,32 +10,14 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 )
 
-// completionGate suppresses a completion event identical to the previous one.
-type completionGate struct {
-	lastEvent    app.ProgressEvent
-	lastComplete bool
-}
-
 func isComplete(event app.ProgressEvent) bool {
 	return event.Phase == "complete" || event.Total > 0 && event.Current >= event.Total
 }
 
-// skip reports whether event repeats the previous completion and records it otherwise.
-func (g *completionGate) skip(event app.ProgressEvent) bool {
-	complete := isComplete(event)
-	if complete && g.lastComplete && event == g.lastEvent {
-		return true
-	}
-	g.lastEvent = event
-	g.lastComplete = complete
-	return false
-}
-
-// PlainProgressReporter writes stable progress lines to its configured writer.
+// PlainProgressReporter writes plain, unanimated progress lines to its configured writer.
 type PlainProgressReporter struct {
 	mu     sync.Mutex
 	writer io.Writer
-	gate   completionGate
 }
 
 // NewPlainProgressReporter constructs a plain reporter for the given writer.
@@ -51,9 +33,6 @@ func (r *PlainProgressReporter) Report(event app.ProgressEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.gate.skip(event) {
-		return
-	}
 	_, _ = io.WriteString(r.writer, formatProgressEvent(event))
 }
 
@@ -64,7 +43,6 @@ type StyledProgressReporter struct {
 	mu      sync.Mutex
 	writer  io.Writer
 	styles  styles
-	gate    completionGate
 	animate bool         // false once stopped, so completion is never followed by a new spinner
 	program *tea.Program // nil until the first progress event and after stopping
 	done    chan struct{}
@@ -100,7 +78,7 @@ func (r *StyledProgressReporter) Report(event app.ProgressEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.closed || r.gate.skip(event) {
+	if r.closed {
 		return
 	}
 	if r.animate && !isComplete(event) {

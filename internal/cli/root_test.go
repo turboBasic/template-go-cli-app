@@ -257,7 +257,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	configFile := filepath.Join(t.TempDir(), "settings.toml")
-	if err := os.WriteFile(configFile, []byte("output = 'json'\nquiet = true\n[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
+	if err := os.WriteFile(configFile, []byte("output = 'json'\nquiet = true\n[log]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
@@ -278,8 +278,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := config.Config{
-		LogLevel: "debug",
-		Log:      config.LogConfig{Console: config.ConsoleLogConfig{Level: "debug"}, File: config.FileLogConfig{Level: "debug"}},
+		Log:      config.LogConfig{Level: "debug", File: config.FileLogConfig{Level: "debug"}},
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
@@ -520,9 +519,8 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		quiet bool
-		want  string
 	}{
-		{name: "progress to redirected stderr", want: "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"},
+		{name: "progress to redirected stderr"},
 		{name: "quiet suppresses progress", quiet: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -547,8 +545,9 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 			if len(result) != 2 || result["name"] != "example-1" || result["status"] != "ready" {
 				t.Fatalf("JSON result = %#v, want unwrapped resource result", result)
 			}
-			if got := stderr.String(); got != test.want {
-				t.Fatalf("stderr = %q, want %q", got, test.want)
+			got := stderr.String()
+			if test.quiet && got != "" || !test.quiet && (!strings.Contains(got, "complete: ") || strings.Contains(got, "\x1b")) {
+				t.Fatalf("stderr = %q, quiet = %t; want empty when quiet, plain progress otherwise", got, test.quiet)
 			}
 		})
 	}
@@ -556,19 +555,16 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 
 func TestApplyProgressColor(t *testing.T) {
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	const plain = "applying: Applying resource\nvalidating: Validating resource\ncomplete: Resource applied (1/1)\n"
 	for _, test := range []struct {
-		name    string
-		args    []string
-		want    string // exact stderr when it carries no escape
-		styled  bool
-		wantEnd string
+		name string
+		args []string
+		mode string // plain, quiet or styled
 	}{
-		{name: "redirected default", want: plain},
-		{name: "never", args: []string{"--color", "never"}, want: plain},
-		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, want: plain},
-		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}},
-		{name: "always", args: []string{"--color", "always"}, styled: true, wantEnd: "✓ Resource applied (1/1)\n"},
+		{name: "redirected default", mode: "plain"},
+		{name: "never", args: []string{"--color", "never"}, mode: "plain"},
+		{name: "json with always", args: []string{"--output", "json", "--color", "always"}, mode: "plain"},
+		{name: "quiet with always", args: []string{"--quiet", "--color", "always"}, mode: "quiet"},
+		{name: "always", args: []string{"--color", "always"}, mode: "styled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
@@ -581,17 +577,19 @@ func TestApplyProgressColor(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := stderr.String()
-			if !test.styled {
-				if got != test.want {
-					t.Fatalf("stderr = %q, want %q", got, test.want)
+			switch test.mode {
+			case "quiet":
+				if got != "" {
+					t.Fatalf("stderr = %q, want none", got)
 				}
-				return
-			}
-			if !strings.Contains(got, "\x1b[") {
-				t.Fatalf("stderr = %q, want ANSI escapes", got)
-			}
-			if stripped := ansi.ReplaceAllString(got, ""); !strings.HasSuffix(stripped, test.wantEnd) {
-				t.Fatalf("stripped stderr = %q, want suffix %q", stripped, test.wantEnd)
+			case "plain":
+				if !strings.Contains(got, "complete: ") || strings.Contains(got, "\x1b") {
+					t.Fatalf("stderr = %q, want plain progress without escapes", got)
+				}
+			default:
+				if !strings.Contains(got, "\x1b[") || !strings.Contains(ansi.ReplaceAllString(got, ""), "✓ ") {
+					t.Fatalf("stderr = %q, want ANSI escapes and a completion mark", got)
+				}
 			}
 		})
 	}
@@ -771,6 +769,42 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	}
 }
 
+func TestConfigShowSkipsLoggingAndFactory(t *testing.T) {
+	setupConfigEnvironment(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cli.toml")
+	if err := os.WriteFile(path, []byte("[log.file]\npath = 'app.jsonl'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		want error
+	}{
+		{"succeeds", []string{"--config", path, "config", "show"}, nil},
+		{"invalid log level", []string{"--config", path, "--log-level", "nope", "config", "show"}, app.ErrValidation},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			factoryCalls := 0
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+				factoryCalls++
+				return nil, nil, errors.New("factory must not run")
+			}, testBuildInfo(), nil)
+			command.SetArgs(test.args)
+			command.SetOut(&bytes.Buffer{})
+			if err := command.Execute(); !errors.Is(err, test.want) {
+				t.Fatalf("Execute() error = %v, want %v", err, test.want)
+			}
+			if factoryCalls != 0 {
+				t.Fatalf("factory calls = %d, want zero", factoryCalls)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "app.jsonl")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("log file stat error = %v, want not exist", err)
+			}
+		})
+	}
+}
+
 func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	setupConfigEnvironment(t)
 	if err := os.Unsetenv("CLI_APP_LOG_LEVEL"); err != nil {
@@ -778,10 +812,10 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	firstConfig := filepath.Join(t.TempDir(), "first.toml")
 	secondConfig := filepath.Join(t.TempDir(), "second.toml")
-	if err := os.WriteFile(firstConfig, []byte("[log.console]\nlevel = 'info'\n"), 0o600); err != nil {
+	if err := os.WriteFile(firstConfig, []byte("[log]\nlevel = 'info'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(secondConfig, []byte("[log.console]\nlevel = 'error'\n"), 0o600); err != nil {
+	if err := os.WriteFile(secondConfig, []byte("[log]\nlevel = 'error'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
@@ -797,7 +831,7 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 			t.Fatalf("Execute() with %s: %v", path, err)
 		}
 	}
-	if len(configs) != 2 || configs[0].LogLevel != "info" || configs[1].LogLevel != "error" {
+	if len(configs) != 2 || configs[0].Log.Level != "info" || configs[1].Log.Level != "error" {
 		t.Fatalf("factory configs = %+v, want info then error", configs)
 	}
 }

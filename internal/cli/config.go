@@ -12,13 +12,18 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/output"
 )
 
+// inspectionOnly marks a command that needs the loaded configuration and renderer but no logging or
+// application dependencies; the root hook stops after building the renderer for it.
+const inspectionOnly = "inspection-only"
+
 func newConfigCommand(getEntries func() []config.Entry, getRenderer func() output.Renderer, cleanup func(context.Context) error) *cobra.Command {
 	group := &cobra.Command{Use: "config", Short: "Inspect configuration"}
 	rejectUnknownSubcommands(group)
 	show := &cobra.Command{
-		Use:   "show [key]",
-		Short: "Show the effective configuration and where each value comes from",
-		Args:  validationArgs(cobra.MaximumNArgs(1)),
+		Use:         "show [key]",
+		Short:       "Show the effective configuration and where each value comes from",
+		Args:        validationArgs(cobra.MaximumNArgs(1)),
+		Annotations: map[string]string{inspectionOnly: "true"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			entries := getEntries()
 			if len(args) == 1 {

@@ -2,7 +2,8 @@ package memory
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"strings"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -11,31 +12,17 @@ import (
 
 // ResourceReader provides the reference resources from local memory.
 type ResourceReader struct {
-	resources  []domain.Resource
-	applyDelay time.Duration
-}
-
-// Option configures a ResourceReader.
-type Option func(*ResourceReader)
-
-// WithApplyDelay makes Apply wait d, or return the context's error first, so a demo can show
-// progress while an operation runs.
-func WithApplyDelay(d time.Duration) Option {
-	return func(r *ResourceReader) { r.applyDelay = d }
+	resources []domain.Resource
 }
 
 var _ app.ResourceReader = (*ResourceReader)(nil)
 
 // NewResourceReader constructs the local reference fixtures.
-func NewResourceReader(options ...Option) *ResourceReader {
-	r := &ResourceReader{resources: []domain.Resource{
+func NewResourceReader() *ResourceReader {
+	return &ResourceReader{resources: []domain.Resource{
 		{Name: "example-1", Status: "ready"},
 		{Name: "example-2", Status: "pending"},
 	}}
-	for _, option := range options {
-		option(r)
-	}
-	return r
 }
 
 // Names returns the names available for local resource completion.
@@ -55,6 +42,10 @@ func (r *ResourceReader) List(ctx context.Context) ([]domain.Resource, error) {
 	return append([]domain.Resource(nil), r.resources...), nil
 }
 
+func (r *ResourceReader) notFound(name string) error {
+	return fmt.Errorf("%w: %q; known names are %s", domain.ErrResourceNotFound, name, strings.Join(r.Names(), ", "))
+}
+
 // Status returns a local fixture by name.
 func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resource, error) {
 	if err := ctx.Err(); err != nil {
@@ -65,7 +56,7 @@ func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resour
 			return resource, nil
 		}
 	}
-	return domain.Resource{}, domain.ErrResourceNotFound
+	return domain.Resource{}, r.notFound(name)
 }
 
 // Apply marks a local fixture ready.
@@ -73,20 +64,11 @@ func (r *ResourceReader) Apply(ctx context.Context, name string, _ logging.Secre
 	if err := ctx.Err(); err != nil {
 		return domain.Resource{}, err
 	}
-	if r.applyDelay > 0 {
-		timer := time.NewTimer(r.applyDelay)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return domain.Resource{}, ctx.Err()
-		}
-	}
 	for i := range r.resources {
 		if r.resources[i].Name == name {
 			r.resources[i].Status = "ready"
 			return r.resources[i], nil
 		}
 	}
-	return domain.Resource{}, domain.ErrResourceNotFound
+	return domain.Resource{}, r.notFound(name)
 }

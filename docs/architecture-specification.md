@@ -34,7 +34,7 @@ The template provides hierarchical commands, help, flags, shell completion and v
 | Terminal capability detection    | Go terminal libraries                                          |
 | Terminal styling                 | Lip Gloss                                                      |
 | Animated progress                | Bubbles / Bubble Tea                                           |
-| Concurrent progress coordination | Application event coordination                                 |
+| Concurrent progress coordination | Mutex-guarded progress reporters                               |
 | Secret resolution                | Provider-independent interface; optional 1Password CLI adapter |
 | Tool versions and task runner    | mise                                                           |
 | Git hooks                        | Prek                                                           |
@@ -92,11 +92,11 @@ Configuration locations and discovery:
 - Maps merge recursively; arrays are replaced.
 - File-path-typed values from TOML resolve relative to the file that declares them. Values from flags or environment resolve relative to the working directory.
 
-The loader retains the source metadata needed for path resolution. Where per-leaf provenance is exposed through `config show` and `config explain`, inspection reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
+The loader retains the source metadata needed for path resolution. `config show [key]` is the single inspection command: it reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
 
 ## 6. CLI and output contract
 
-Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation. Domain and application code remain independent of rendering libraries.
+Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation. `--color`, `CLI_APP_COLOR` and the config `color` key govern results and progress: `auto` styles a terminal unless `NO_COLOR` is non-empty, `always` styles regardless of `NO_COLOR`, `never` and JSON never style, and `CLICOLOR_FORCE` does not apply; help and errors follow terminal detection, `NO_COLOR` and `CLICOLOR_FORCE` as Fang does. Domain and application code remain independent of rendering libraries.
 
 The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Representative commands are `cli-app resource list`, `cli-app resource status` and `cli-app resource apply`.
 
@@ -108,7 +108,7 @@ Any additional destination attaches behind the same redaction, and rotation is e
 
 ## 8. Progress, errors and retries
 
-A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Where several operations report at once, rendering is coordinated so they do not corrupt terminal output or block application execution indefinitely.
+A semantic progress interface has a plain stderr reporter. Animated progress renders only when terminal capability permits and degrades safely when redirected or non-interactive. Where several operations report at once, rendering is coordinated so they do not corrupt terminal output.
 
 Use classified errors, propagate cancellation, perform cleanup and retry only eligible infrastructure operations with bounded behavior. Do not retry whole application workflows automatically. Exact numeric exit-code mapping and retry backoff defaults remain implementation-level details to finalize while preserving these contracts.
 

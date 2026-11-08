@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
@@ -12,28 +13,62 @@ import (
 
 var _ app.ResourceReader = (*ResourceReader)(nil)
 
-// ResourceReader retries only explicitly configured, read-only status lookups.
+// Policy bounds attempts and exponential backoff. The configuration layer validates it.
+type Policy struct {
+	MaxAttempts  int
+	InitialDelay time.Duration
+	MaxDelay     time.Duration
+	Jitter       float64
+}
+
+// Clock waits for a delay or returns when the context is canceled.
+type Clock interface {
+	Sleep(context.Context, time.Duration) error
+}
+
+// RealClock waits using a cancelable timer.
+type RealClock struct{}
+
+// Sleep waits for delay unless ctx is canceled first.
+func (RealClock) Sleep(ctx context.Context, delay time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// Random supplies a value in [0, 1) for jitter selection; *rand.Rand satisfies it.
+type Random interface {
+	Float64() float64
+}
+
+// ResourceReader retries only read-only status lookups; List and Apply are never retried.
 type ResourceReader struct {
 	reader app.ResourceReader
-	status *Policy
+	policy Policy
 	clock  Clock
 	random Random
 }
 
-// NewResourceReader validates and wraps a resource reader with optional status retries.
-func NewResourceReader(reader app.ResourceReader, status *Policy, clock Clock, random Random) (*ResourceReader, error) {
+// NewResourceReader wraps a resource reader with status retries under policy.
+func NewResourceReader(reader app.ResourceReader, policy Policy, clock Clock, random Random) (*ResourceReader, error) {
 	if reader == nil {
 		return nil, errors.New("resource reader is required")
 	}
-	if status != nil {
-		if err := status.Validate(); err != nil {
-			return nil, fmt.Errorf("validate status retry policy: %w", err)
-		}
-		if status.MaxAttempts > 1 && (clock == nil || status.Jitter > 0 && random == nil) {
-			return nil, errors.New("status retries require a clock and jitter requires a random source")
-		}
+	if clock == nil || policy.Jitter > 0 && random == nil {
+		return nil, errors.New("status retries require a clock and jitter requires a random source")
 	}
-	return &ResourceReader{reader: reader, status: status, clock: clock, random: random}, nil
+	return &ResourceReader{reader: reader, policy: policy, clock: clock, random: random}, nil
 }
 
 // List delegates without retrying the operation.
@@ -43,16 +78,46 @@ func (r *ResourceReader) List(ctx context.Context) ([]domain.Resource, error) {
 
 // Status retries only unavailable errors because this operation is read-only.
 func (r *ResourceReader) Status(ctx context.Context, name string) (domain.Resource, error) {
-	var resource domain.Resource
-	err := Do(ctx, func(ctx context.Context) error {
-		var err error
-		resource, err = r.reader.Status(ctx, name)
-		return err
-	}, r.status, Idempotent, func(err error) bool { return errors.Is(err, app.ErrUnavailable) }, r.clock, r.random)
-	return resource, err
+	if r.policy.MaxAttempts <= 1 {
+		return r.reader.Status(ctx, name)
+	}
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return domain.Resource{}, errors.Join(lastErr, err)
+		}
+		resource, err := r.reader.Status(ctx, name)
+		if err == nil || !errors.Is(err, app.ErrUnavailable) {
+			return resource, err
+		}
+		lastErr = err
+		if attempt == r.policy.MaxAttempts {
+			return domain.Resource{}, fmt.Errorf("retry exhausted after %d attempts: %w", attempt, lastErr)
+		}
+		if err := r.clock.Sleep(ctx, r.delay(attempt)); err != nil {
+			return domain.Resource{}, errors.Join(lastErr, fmt.Errorf("wait before retry: %w", err))
+		}
+	}
 }
 
 // Apply delegates without retrying the mutating operation.
 func (r *ResourceReader) Apply(ctx context.Context, name string, credential logging.Secret) (domain.Resource, error) {
 	return r.reader.Apply(ctx, name, credential)
+}
+
+// delay is the exponential backoff after attempt, jittered and never above MaxDelay.
+func (r *ResourceReader) delay(attempt int) time.Duration {
+	delay := r.policy.InitialDelay
+	for i := 1; i < attempt; i++ {
+		if delay > r.policy.MaxDelay/2 {
+			delay = r.policy.MaxDelay
+			break
+		}
+		delay *= 2
+	}
+	if r.policy.Jitter > 0 {
+		jittered := float64(delay) * (1 + r.policy.Jitter*(2*r.random.Float64()-1))
+		delay = time.Duration(min(jittered, float64(r.policy.MaxDelay)))
+	}
+	return delay
 }

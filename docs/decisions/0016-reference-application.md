@@ -13,7 +13,7 @@ Include a simulated infrastructure CLI using local fixtures and no external cred
 
 ## Context
 
-The accepted register selects a simulated infrastructure reference application; later stages reuse the same use cases to demonstrate presentation and concurrent progress.
+The accepted register selects a simulated infrastructure reference application; later stages reuse the same use cases to demonstrate presentation and progress.
 
 ## Options
 

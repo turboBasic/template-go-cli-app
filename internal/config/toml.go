@@ -40,6 +40,12 @@ func validateValues(source string, values map[string]any, schema map[string]valu
 			path = prefix + "." + key
 		}
 		if nested, ok := value.(map[string]any); ok {
+			if _, scalar := schema[path]; scalar {
+				return fmt.Errorf("decode configuration %s: invalid type for key %q", source, path)
+			}
+			if !knownTable(schema, path) {
+				return fmt.Errorf("decode configuration %s: unknown key %q", source, path)
+			}
 			if err := validateValues(source, nested, schema, path); err != nil {
 				return err
 			}
@@ -69,6 +75,16 @@ func validateValues(source string, values map[string]any, schema map[string]valu
 	return nil
 }
 
+// knownTable reports whether path is a prefix of a schema key, so an empty table is checked like a leaf.
+func knownTable(schema map[string]valueType, path string) bool {
+	for key := range schema {
+		if strings.HasPrefix(key, path+".") {
+			return true
+		}
+	}
+	return false
+}
+
 func decodeConfig(values map[string]any) (Config, error) {
 	for _, key := range []string{
 		"timeouts.cleanup",
@@ -92,7 +108,6 @@ func decodeConfig(values map[string]any) (Config, error) {
 	if err := settings.Unmarshal("", &config); err != nil {
 		return Config{}, err
 	}
-	config.LogLevel = config.Log.Console.Level
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}

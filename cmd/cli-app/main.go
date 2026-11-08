@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -19,9 +20,6 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
-// demoApplyDelay keeps the reference fixture's apply running long enough to show the spinner.
-const demoApplyDelay = time.Second
-
 var version = "dev"
 var commit = "unknown"
 var buildDate = "unknown"
@@ -32,17 +30,11 @@ var (
 )
 
 func main() {
-	resources := memory.NewResourceReader(memory.WithApplyDelay(demoApplyDelay))
+	resources := memory.NewResourceReader()
 	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		var reader app.ResourceReader = resources
 		if configured := effective.Retry.Resource.Status; configured != nil {
-			policy := &retry.Policy{
-				MaxAttempts:  configured.MaxAttempts,
-				InitialDelay: configured.InitialDelay,
-				MaxDelay:     configured.MaxDelay,
-				Jitter:       configured.Jitter,
-			}
-			retryingReader, err := retry.NewResourceReader(reader, policy, retry.RealClock{}, retry.NewRandomSource(time.Now().UnixNano()))
+			retryingReader, err := retry.NewResourceReader(reader, retry.Policy(*configured), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())))
 			if err != nil {
 				return nil, nil, fmt.Errorf("configure status retries: %w", err)
 			}

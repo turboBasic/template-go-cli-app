@@ -22,7 +22,7 @@ func New(cfg config.LogConfig) (Result, error) {
 }
 
 func newWithWriters(cfg config.LogConfig, stderr io.Writer) (Result, error) {
-	consoleLevel, err := parseLevel(cfg.Console.Level)
+	consoleLevel, err := parseLevel(cfg.Level)
 	if err != nil {
 		return Result{}, fmt.Errorf("configure console logger: %w", err)
 	}

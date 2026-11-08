@@ -8,8 +8,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	if got, want := Defaults(), (Config{
-		LogLevel: "warn",
-		Log:      LogConfig{Console: ConsoleLogConfig{Level: "warn"}, File: FileLogConfig{Level: "debug"}},
+		Log:      LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}},
 		Output:   "text",
 		Color:    "auto",
 		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
@@ -54,7 +53,7 @@ func TestConfigValidate(t *testing.T) {
 		want string
 	}{
 		{name: "valid defaults"},
-		{name: "invalid console log level", edit: func(c *Config) { c.Log.Console.Level = "trace" }, want: "invalid console log level"},
+		{name: "invalid log level", edit: func(c *Config) { c.Log.Level = "trace" }, want: "invalid log level"},
 		{name: "invalid file log level", edit: func(c *Config) { c.Log.File.Level = "trace" }, want: "invalid file log level"},
 		{name: "invalid output", edit: func(c *Config) { c.Output = "yaml" }, want: "invalid output"},
 		{name: "invalid color", edit: func(c *Config) { c.Color = "sometimes" }, want: "invalid color"},

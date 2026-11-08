@@ -9,7 +9,6 @@ import (
 
 // Config contains the supported Stage 1 application settings.
 type Config struct {
-	LogLevel string         `koanf:"-"` // Deprecated: use Log.Console.Level.
 	Log      LogConfig      `koanf:"log"`
 	Output   string         `koanf:"output"`
 	Color    string         `koanf:"color"`
@@ -58,13 +57,9 @@ type ResourceTimeouts struct {
 
 // LogConfig contains the settings for local log destinations.
 type LogConfig struct {
-	Console ConsoleLogConfig `koanf:"console"`
-	File    FileLogConfig    `koanf:"file"`
-}
-
-// ConsoleLogConfig configures human-readable stderr logging.
-type ConsoleLogConfig struct {
-	Level string `koanf:"level"`
+	// Level is the human-readable stderr level, set by --log-level.
+	Level string        `koanf:"level"`
+	File  FileLogConfig `koanf:"file"`
 }
 
 // FileLogConfig configures optional JSON Lines file logging.
@@ -76,8 +71,7 @@ type FileLogConfig struct {
 // Defaults returns the settings used when no source overrides them.
 func Defaults() Config {
 	return Config{
-		LogLevel: "warn",
-		Log:      LogConfig{Console: ConsoleLogConfig{Level: "warn"}, File: FileLogConfig{Level: "debug"}},
+		Log:      LogConfig{Level: "warn", File: FileLogConfig{Level: "debug"}},
 		Output:   "text",
 		Color:    "auto",
 		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
@@ -86,8 +80,8 @@ func Defaults() Config {
 
 // Validate checks that the current settings are supported together.
 func (c Config) Validate() error {
-	if !oneOf(c.Log.Console.Level, "debug", "info", "warn", "error") {
-		return fmt.Errorf("invalid console log level %q: must be debug, info, warn, or error", c.Log.Console.Level)
+	if !oneOf(c.Log.Level, "debug", "info", "warn", "error") {
+		return fmt.Errorf("invalid log level %q: must be debug, info, warn, or error", c.Log.Level)
 	}
 	if !oneOf(c.Log.File.Level, "debug", "info", "warn", "error") {
 		return fmt.Errorf("invalid file log level %q: must be debug, info, warn, or error", c.Log.File.Level)

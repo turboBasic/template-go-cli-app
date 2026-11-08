@@ -72,8 +72,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertLoggingPath(t, got, filepath.Join(filepath.Dir(project), "logs/project.jsonl"), Source(project))
-		if got.Config.Log.Console.Level != "warn" {
-			t.Errorf("console level changed during path resolution: %q", got.Config.Log.Console.Level)
+		if got.Config.Log.Level != "warn" {
+			t.Errorf("console level changed during path resolution: %q", got.Config.Log.Level)
 		}
 	})
 
