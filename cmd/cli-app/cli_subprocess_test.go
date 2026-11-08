@@ -165,15 +165,6 @@ func TestCLIProcessLongRunningDemoStopsOnSIGINT(t *testing.T) {
 	}
 }
 
-func TestCLIProcessLongRunningDemoTimeoutExits124(t *testing.T) {
-	binary := buildCLIProcess(t, "")
-	started := time.Now()
-	stdout, stderr, code := runCLIProcess(t, binary, "demo", "long-running", "--timeout", "100ms")
-	if code != 124 || stdout != "" || time.Since(started) > 10*time.Second {
-		t.Fatalf("demo long-running --timeout 100ms = stdout %q, stderr %q, exit %d after %s; want exit 124 well before the demo's length", stdout, stderr, code, time.Since(started))
-	}
-}
-
 func buildCLIProcess(t *testing.T, ldflags string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "cli-app")

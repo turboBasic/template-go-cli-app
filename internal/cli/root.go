@@ -63,7 +63,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&outputFormat, "output", "text", "result format (text, json)")
 	flags.StringVar(&color, "color", "auto", "result color mode (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
-	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected resource operation")
+	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected operation")
 	var resources *app.ResourceService
 	var renderer output.Renderer
 	var loadResult config.LoadResult
@@ -204,7 +204,9 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	closeAfterRun(apply, cleanup)
 	resource.AddCommand(list, status, apply)
 	demo := newDemoCommand(getResources)
-	closeAfterRun(demo.Commands()[0], cleanup)
+	for _, command := range demo.Commands() {
+		closeAfterRun(command, cleanup)
+	}
 	root.AddCommand(resource, demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer, cleanup))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()

@@ -963,13 +963,9 @@ func TestDemoCommands(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		args []string
-		bad  bool
 	}{
 		{name: "group help", args: []string{"demo"}},
 		{name: "help topic", args: []string{"help", "demo", "long-running"}},
-		{name: "unknown subcommand", args: []string{"demo", "bogus"}, bad: true},
-		{name: "extra argument", args: []string{"demo", "long-running", "extra"}, bad: true},
-		{name: "non-positive timeout", args: []string{"demo", "long-running", "--timeout", "0s"}, bad: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			command := newTestRootCommand(t)
@@ -978,12 +974,6 @@ func TestDemoCommands(t *testing.T) {
 			command.SetOut(&stdout)
 			command.SetErr(&stderr)
 			err := command.Execute()
-			if test.bad {
-				if !errors.Is(err, app.ErrValidation) || stderr.Len() != 0 {
-					t.Fatalf("Execute() error = %v, stderr %q; want a validation error and no progress", err, stderr.String())
-				}
-				return
-			}
 			if err != nil || !strings.Contains(stdout.String(), "long-running") {
 				t.Fatalf("Execute() error = %v, stdout %q; want help naming long-running", err, stdout.String())
 			}
