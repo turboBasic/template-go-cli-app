@@ -9,10 +9,14 @@ import (
 func TestLoggingFilePathSourceResolution(t *testing.T) {
 	root := t.TempDir()
 	work := filepath.Join(root, "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	user := configAt(t, filepath.Join(root, "user"), "[log.file]\npath = 'logs/user.jsonl'\n")
 	project := configAt(t, filepath.Join(root, "project"), "[log.file]\npath = 'logs/project.jsonl'\n")
 	t.Run("user TOML origin", func(t *testing.T) {
-		got, err := loadAt(ConfigFiles{User: user}, nil, nil, work)
+		t.Chdir(work)
+		got, err := load(ConfigFiles{User: user}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -20,7 +24,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("project TOML origin wins", func(t *testing.T) {
-		got, err := loadAt(ConfigFiles{User: user, Project: project}, nil, nil, work)
+		t.Chdir(work)
+		got, err := load(ConfigFiles{User: user, Project: project}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -31,7 +36,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("environment path uses working directory", func(t *testing.T) {
-		got, err := loadAt(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil, work)
+		t.Chdir(work)
+		got, err := load(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,8 +45,9 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("changed flag uses working directory", func(t *testing.T) {
+		t.Chdir(work)
 		flags := map[string]FlagValue{"log-file-path": {Value: "logs/flag.jsonl", Changed: true, Source: "--log-file-path"}}
-		got, err := loadAt(ConfigFiles{Project: project}, nil, flags, work)
+		got, err := load(ConfigFiles{Project: project}, nil, flags)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +57,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	t.Run("absolute path is preserved", func(t *testing.T) {
 		absolute := filepath.Join(root, "absolute.jsonl")
 		file := configAt(t, filepath.Join(root, "absolute"), "[log.file]\npath = '"+absolute+"'\n")
-		got, err := loadAt(ConfigFiles{Project: file}, nil, nil, work)
+		t.Chdir(work)
+		got, err := load(ConfigFiles{Project: file}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +66,8 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	})
 
 	t.Run("unset file path remains unset", func(t *testing.T) {
-		got, err := loadAt(ConfigFiles{}, nil, nil, work)
+		t.Chdir(work)
+		got, err := load(ConfigFiles{}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

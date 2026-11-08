@@ -158,6 +158,9 @@ func TestConfigShowMasksSensitiveValues(t *testing.T) {
 	entries := []config.Entry{
 		{Key: "output", Value: "text", Source: config.KindDefault},
 		{Key: "provider.api_token", Value: "secret-value", Source: config.KindUserFile, Origin: "/u/config.toml"},
+		{Key: "provider.client_secret", Value: "client-secret-value", Source: config.KindUserFile},
+		{Key: "provider.private_key", Value: "private-key-value", Source: config.KindUserFile},
+		{Key: "demo.secret_credential.reference", Value: "op://vault/item/field", Source: config.KindUserFile},
 	}
 	for _, format := range []output.Format{output.FormatText, output.FormatJSON} {
 		t.Run(string(format), func(t *testing.T) {
@@ -169,8 +172,15 @@ func TestConfigShowMasksSensitiveValues(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := out.String()
-			if strings.Contains(got, "secret-value") || !strings.Contains(got, "[REDACTED]") || !strings.Contains(got, "text") {
-				t.Errorf("output = %q, want masked token and the real output value", got)
+			for _, secret := range []string{"secret-value", "client-secret-value", "private-key-value"} {
+				if strings.Contains(got, secret) {
+					t.Errorf("output = %q, want %q masked", got, secret)
+				}
+			}
+			for _, visible := range []string{"[REDACTED]", "text", "op://vault/item/field"} {
+				if !strings.Contains(got, visible) {
+					t.Errorf("output = %q, want it to include %q", got, visible)
+				}
 			}
 		})
 	}

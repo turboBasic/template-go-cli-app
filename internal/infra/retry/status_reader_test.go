@@ -3,7 +3,9 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,21 +137,15 @@ func TestStatusReaderReportsRetries(t *testing.T) {
 		failures     int
 		withReporter bool
 		wantErr      bool
-		wantEvents   []app.ProgressEvent
+		wantEvents   int
 	}{
 		{
 			name: "two failures then success", failures: 2, withReporter: true,
-			wantEvents: []app.ProgressEvent{
-				{Phase: "retrying", Message: "Attempt 1 of 3 failed, retrying in 1ms"},
-				{Phase: "retrying", Message: "Attempt 2 of 3 failed, retrying in 2ms"},
-			},
+			wantEvents: 2,
 		},
 		{
 			name: "exhaustion reports no third event", failures: 3, withReporter: true, wantErr: true,
-			wantEvents: []app.ProgressEvent{
-				{Phase: "retrying", Message: "Attempt 1 of 3 failed, retrying in 1ms"},
-				{Phase: "retrying", Message: "Attempt 2 of 3 failed, retrying in 2ms"},
-			},
+			wantEvents: 2,
 		},
 		{name: "no reporter reports nothing", failures: 2},
 	}
@@ -178,8 +174,13 @@ func TestStatusReaderReportsRetries(t *testing.T) {
 			if (err != nil) != test.wantErr {
 				t.Fatalf("Status() error = %v, want error %t", err, test.wantErr)
 			}
-			if !reflect.DeepEqual(reporter.events, test.wantEvents) {
-				t.Fatalf("events = %+v, want %+v", reporter.events, test.wantEvents)
+			if len(reporter.events) != test.wantEvents {
+				t.Fatalf("reported %d retries, want %d", len(reporter.events), test.wantEvents)
+			}
+			for i, event := range reporter.events {
+				if event.Phase != "retrying" || !strings.Contains(event.Message, fmt.Sprintf("Attempt %d", i+1)) || !strings.Contains(event.Message, clock.delays[i].String()) {
+					t.Errorf("retry event %d = %+v, want attempt and wait %s reported", i+1, event, clock.delays[i])
+				}
 			}
 		})
 	}

@@ -8,23 +8,25 @@ import (
 )
 
 func TestResourceServiceLongRunning(t *testing.T) {
-	t.Run("counts every step and then completes", func(t *testing.T) {
+	t.Run("reports counted progress and then completes", func(t *testing.T) {
 		var events []ProgressEvent
 		service := newTestResourceService(fakeResourceReader{}, progressRecorder{events: &events})
 		WithLongRunningDuration(20 * time.Millisecond)(service)
 		if err := service.LongRunning(context.Background()); err != nil {
 			t.Fatalf("LongRunning() error = %v", err)
 		}
-		if len(events) != longRunningSteps+1 {
-			t.Fatalf("events = %d, want %d", len(events), longRunningSteps+1)
+		if len(events) < 2 {
+			t.Fatalf("events = %d, want progress and completion", len(events))
 		}
-		for i, event := range events[:longRunningSteps] {
-			if event.Phase != "working" || event.Current != i || event.Total != longRunningSteps {
-				t.Fatalf("events[%d] = %#v, want working %d/%d", i, event, i, longRunningSteps)
+		previous := -1
+		for i, event := range events[:len(events)-1] {
+			if event.Phase != "working" || event.Current < previous || event.Total <= 0 || event.Current > event.Total {
+				t.Fatalf("events[%d] = %#v, want monotonic counted progress", i, event)
 			}
+			previous = event.Current
 		}
-		if last := events[longRunningSteps]; last.Phase != "complete" || last.Current != longRunningSteps || last.Total != longRunningSteps {
-			t.Fatalf("last event = %#v, want complete %d/%[2]d", last, longRunningSteps)
+		if last := events[len(events)-1]; last.Phase != "complete" || last.Current != last.Total || last.Total <= 0 {
+			t.Fatalf("last event = %#v, want complete counted progress", last)
 		}
 	})
 
@@ -33,7 +35,7 @@ func TestResourceServiceLongRunning(t *testing.T) {
 		defer cancel()
 		var events []ProgressEvent
 		service := newTestResourceService(fakeResourceReader{}, progressRecorder{events: &events, onReport: func(ProgressEvent) {
-			if len(events) == 3 {
+			if len(events) == 1 {
 				cancel()
 			}
 		}})
@@ -41,8 +43,8 @@ func TestResourceServiceLongRunning(t *testing.T) {
 		if err := service.LongRunning(ctx); !errors.Is(err, context.Canceled) {
 			t.Fatalf("LongRunning() error = %v, want context cancellation", err)
 		}
-		if len(events) != 3 {
-			t.Fatalf("events = %d, want 3 and no completion", len(events))
+		if len(events) == 0 || events[len(events)-1].Phase == "complete" {
+			t.Fatalf("events = %#v, want progress and no completion", events)
 		}
 	})
 

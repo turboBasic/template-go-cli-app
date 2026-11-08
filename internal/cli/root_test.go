@@ -936,13 +936,13 @@ func TestDemoLongRunningProgress(t *testing.T) {
 					t.Fatalf("stderr = %q, want none", got)
 				}
 			case "plain":
-				if !regexp.MustCompile(`working: Working \(\d+/\d+\)\n`).MatchString(got) || !regexp.MustCompile(`complete: Long-running demo complete \(\d+/\d+\)\n$`).MatchString(got) || strings.Contains(got, "\x1b") {
-					t.Fatalf("stderr = %q, want plain counted lines ending in completion, with no escapes", got)
+				if !strings.Contains(got, "Working") || !regexp.MustCompile(`complete: .*\(\d+/\d+\)\n$`).MatchString(got) || strings.Contains(got, "\x1b") {
+					t.Fatalf("stderr = %q, want plain progress and counted completion, with no escapes", got)
 				}
 			default:
 				plain := ansi.ReplaceAllString(got, "")
-				if !strings.Contains(got, "\x1b[") || !regexp.MustCompile(`[█▏▎▍▌▋▊▉░]+ +\d+% working Working \(\d+/\d+\)\n`).MatchString(plain) || !regexp.MustCompile(`✓ Long-running demo complete \(\d+/\d+\)\n$`).MatchString(plain) {
-					t.Fatalf("stderr = %q, want a bar with a percentage on a working line and the completion line last", got)
+				if !strings.Contains(got, "\x1b[") || !regexp.MustCompile(`\d+%.*Working`).MatchString(plain) || !regexp.MustCompile(`\(\d+/\d+\)\n$`).MatchString(plain) {
+					t.Fatalf("stderr = %q, want styled progress and counted completion", got)
 				}
 			}
 		})

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestLoadFilesPrecedenceAndSources(t *testing.T) {
+func TestLoadFilePrecedenceAndSources(t *testing.T) {
 	root := t.TempDir()
 	userPath := filepath.Join(root, "user.toml")
 	projectPath := filepath.Join(root, "project.toml")
@@ -19,7 +19,7 @@ func TestLoadFilesPrecedenceAndSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := LoadFiles(ConfigFiles{User: userPath, Project: projectPath})
+	got, err := load(ConfigFiles{User: userPath, Project: projectPath}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := LoadFiles(ConfigFiles{User: userPath})
+	got, err := load(ConfigFiles{User: userPath}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
