@@ -284,8 +284,11 @@ func isHelpOrCompletion(cmd *cobra.Command) bool {
 func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
 	return &cobra.Command{
 		Use:   "structured-output",
-		Short: "List resources",
-		Args:  validationArgs(cobra.NoArgs),
+		Short: "Demonstrate text and JSON results written to stdout",
+		Long: "Demonstrates the result contract: the resource list is a human table by default and a JSON array with\n" +
+			"--output json, always on stdout. Look at the split: redirect stdout and only the result arrives, with no\n" +
+			"progress or diagnostics mixed in.",
+		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			items, err := getResources().List(cmd.Context())
 			if err != nil {
@@ -298,8 +301,10 @@ func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, ge
 
 func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "not-found <name>",
-		Short:             "Show a resource status",
+		Use:   "not-found <name>",
+		Short: "Demonstrate an actionable not-found error with shell completion of names",
+		Long: "Demonstrates the error contract: an unknown name fails with exit 1 and a message that names it and lists the\n" +
+			"known names. Look at the message, then press Tab after the command: the shell completes the known names.",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -314,8 +319,11 @@ func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRendere
 
 func newDemoSecretCredentialCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
 	return &cobra.Command{
-		Use:               "secret-credential <name>",
-		Short:             "Apply a resource",
+		Use:   "secret-credential <name>",
+		Short: "Demonstrate a secret reference resolved at run time and never printed",
+		Long: "Demonstrates the secret contract: set demo.secret_credential.reference (or\n" +
+			"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE) to a scheme://reference such as an op:// item. The reference is\n" +
+			"resolved only when this command runs, and the secret value never reaches output, logs or `config show`.",
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -997,5 +998,26 @@ func TestDemoLongRunningHonorsTimeout(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > 5*time.Second || strings.Contains(stderr.String(), "complete:") {
 		t.Fatalf("took %s with stderr %q, want it to stop at the timeout without completing", elapsed, stderr.String())
+	}
+}
+
+func TestDemoCommandsAreDemonstrations(t *testing.T) {
+	demo, _, err := newTestRootCommand(t).Find([]string{"demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, command := range demo.Commands() {
+		got = append(got, command.Name())
+		if !strings.HasPrefix(command.Short, "Demonstrate") {
+			t.Errorf("demo %s Short = %q, want it to begin Demonstrate", command.Name(), command.Short)
+		}
+		if command.Long == "" {
+			t.Errorf("demo %s has no Long saying what to look at", command.Name())
+		}
+	}
+	slices.Sort(got)
+	if want := []string{"long-running", "not-found", "secret-credential", "structured-output"}; !slices.Equal(got, want) {
+		t.Errorf("demo subcommands = %v, want %v", got, want)
 	}
 }
