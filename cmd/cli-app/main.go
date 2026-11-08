@@ -4,20 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"math/rand"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
-	"time"
 
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
-	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
-	"github.com/turboBasic/template-go-cli-app/internal/infra/onepassword"
-	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
 var version = "dev"
@@ -31,15 +25,7 @@ var (
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		flaky, err := retry.NewStatusReader(memory.NewFlakyReader(app.FlakyFailures), retry.Policy(effective.Retry.Demo.FlakyDependency), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
-		if err != nil {
-			return nil, nil, fmt.Errorf("configure status retries: %w", err)
-		}
-		return app.NewResourceService(resources, logger, progressReporter,
-			app.WithCredential(onepassword.NewResolver(onepassword.ExecRunner{}), effective.Demo.SecretCredential.Reference),
-			app.WithFlakyDependency(flaky)), nil, nil
-	}, buildInfo(), resources.Names())
+	command := cli.NewRootCommandWithFactory(newDemoResourceFactory(resources), buildInfo(), resources.Names())
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
 		return cli.Execute(ctx, command)
