@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -263,7 +264,9 @@ func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, ge
 			if err != nil {
 				return err
 			}
-			return getRenderer().RenderList(items)
+			return getRenderer().RenderResult(demoResourceResultsFor(items), func(w io.Writer, options output.Options) error {
+				return renderDemoResources(w, options, items)
+			})
 		},
 	}
 }
@@ -281,7 +284,9 @@ func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRendere
 			if err != nil {
 				return err
 			}
-			return getRenderer().RenderResource(resource)
+			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
+				return renderDemoResource(w, options, resource)
+			})
 		},
 	}
 }
@@ -300,7 +305,9 @@ func newDemoSecretCredentialCommand(getResources func() *app.ResourceService, ge
 			if err != nil {
 				return err
 			}
-			return getRenderer().RenderResource(resource)
+			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
+				return renderDemoResource(w, options, resource)
+			})
 		},
 	}
 }
@@ -348,7 +355,9 @@ func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, get
 			if err != nil {
 				return err
 			}
-			return getRenderer().RenderResource(resource)
+			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
+				return renderDemoResource(w, options, resource)
+			})
 		},
 	}
 	command.Flags().Int("max-attempts", 0, "override retry.demo.flaky_dependency.max_attempts")
