@@ -28,11 +28,12 @@ type CommandRegistration struct {
 
 // CommandRuntime exposes shared facilities to commands after a selected command initializes them.
 type CommandRuntime struct {
-	Configuration   config.LoadResult
-	Renderer        output.Renderer
-	Logger          *slog.Logger
-	Progress        app.ProgressReporter
-	runID           uint64
+	Configuration config.LoadResult
+	Renderer      output.Renderer
+	Logger        *slog.Logger
+	Progress      app.ProgressReporter
+	// RunID changes for each execution so lazy command dependencies can be reset after cleanup.
+	RunID           uint64
 	registerCleanup func(func(context.Context) error)
 }
 
@@ -130,7 +131,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		runtime.Renderer = output.Renderer{}
 		runtime.Logger = nil
 		runtime.Progress = nil
-		runtime.runID++
+		runtime.RunID++
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}

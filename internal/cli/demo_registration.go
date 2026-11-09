@@ -40,8 +40,8 @@ type demoResourceGroup struct {
 }
 
 func (g *demoResourceGroup) get(ctx context.Context) (*app.ResourceService, error) {
-	if g.runID != g.runtime.runID {
-		g.runID = g.runtime.runID
+	if g.runID != g.runtime.RunID {
+		g.runID = g.runtime.RunID
 		g.initialized = false
 		g.resources = nil
 		g.err = nil
