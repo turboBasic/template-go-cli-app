@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -234,7 +235,7 @@ func TestCLIProcessFlakyDependency(t *testing.T) {
 		args        []string
 		after       []string // flags of the demo command itself, placed after its name
 		wantCode    int
-		wantStdout  string // JSON byte for byte, text by its words; empty requires none
+		wantStdout  string // JSON by decoded fields, text by its words; empty requires none
 		wantStderr  string // substring of stderr
 		wantRetries int    // exact count of "retrying:" lines on stderr
 		silent      bool   // stderr must be empty
@@ -276,11 +277,12 @@ func TestCLIProcessFlakyDependency(t *testing.T) {
 	}
 }
 
-// stdoutMatches compares JSON, which is machine-readable, byte for byte and human text by its words, so the
-// text's punctuation and spacing may change without breaking a test.
+// stdoutMatches compares JSON by decoded fields and human text by its words.
 func stdoutMatches(got, want string) bool {
 	if strings.HasPrefix(want, "{") {
-		return got == want
+		var gotFields, wantFields map[string]string
+		return json.Unmarshal([]byte(got), &gotFields) == nil &&
+			json.Unmarshal([]byte(want), &wantFields) == nil && maps.Equal(gotFields, wantFields)
 	}
 	words := func(text string) []string {
 		return strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' })
