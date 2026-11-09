@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"os"
@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/turboBasic/template-go-cli-app/internal/cli"
+	"github.com/turboBasic/template-go-cli-app/internal/config"
 )
 
-// TestExampleFileMatchesSchema keeps the root example file in step with the code: uncommenting every
-// setting must give a valid file that lists each supported key, and the values it shows as defaults
-// must be the defaults. The glob survives scripts/init.sh renaming the file.
-func TestExampleFileMatchesSchema(t *testing.T) {
+func TestExampleFileMatchesRegisteredSchemasAndDefaults(t *testing.T) {
 	paths, err := filepath.Glob("../../.*.example.toml")
 	if err != nil || len(paths) != 1 {
 		t.Fatalf("want exactly one root .*.example.toml, got %v (err %v)", paths, err)
@@ -28,30 +28,54 @@ func TestExampleFileMatchesSchema(t *testing.T) {
 		uncommented = append(uncommented, line)
 	}
 	text := strings.Join(uncommented, "\n")
-
-	values, err := parseTOML(paths[0], []byte(text))
+	path := filepath.Join(t.TempDir(), "example.toml")
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings := cli.DemoApplicationSettings()
+	loaded, err := config.LoadWithSettings(config.ConfigFiles{Project: path}, nil, settings)
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed := make(map[string]bool)
-	for _, leaf := range leaves(values) {
-		listed[leaf.key] = true
+	keys := make(map[string]bool)
+	for _, entry := range loaded.Entries() {
+		keys[entry.Key] = true
 	}
-	for key := range productionSchema() {
-		if !listed[key] {
-			t.Errorf("%s does not list key %q", paths[0], key)
+	var prefix string
+	for _, line := range uncommented {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			prefix = strings.TrimSuffix(strings.TrimPrefix(line, "["), "]")
+			continue
+		}
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, _, ok := strings.Cut(line, " = ")
+		if ok {
+			if prefix != "" {
+				key = prefix + "." + key
+			}
+			if !keys[key] {
+				t.Errorf("%s is absent from registered config schema", key)
+			}
 		}
 	}
-
-	got, err := DecodeTOML(paths[0], []byte(text))
+	defaults, err := config.LoadWithSettings(config.ConfigFiles{}, nil, settings)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// These have no default; the file shows an example value for each.
-	got.Log.File.Path = ""
-	got.Timeouts.Demo = DemoTimeouts{}
-	got.Demo.SecretCredential.Reference = ""
-	if want := Defaults(); !reflect.DeepEqual(got, want) {
-		t.Errorf("example file defaults differ from Defaults():\n got %+v\nwant %+v", got, want)
+	gotApp := loaded.Application.(cli.DemoConfig)
+	gotApp.Demo.SecretCredential.Reference = ""
+	gotApp.Timeouts.Demo.StructuredOutput = nil
+	gotApp.Timeouts.Demo.NotFound = nil
+	gotApp.Timeouts.Demo.SecretCredential = nil
+	gotShared := loaded.Config
+	gotShared.Log.File.Path = ""
+	if !reflect.DeepEqual(gotShared, defaults.Config) {
+		t.Errorf("example shared defaults differ: got %+v want %+v", gotShared, defaults.Config)
+	}
+	if !reflect.DeepEqual(gotApp, defaults.Application) {
+		t.Errorf("example application defaults differ: got %+v want %+v", gotApp, defaults.Application)
 	}
 }

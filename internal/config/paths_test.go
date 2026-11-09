@@ -16,7 +16,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	project := configAt(t, filepath.Join(root, "project"), "[log.file]\npath = 'logs/project.jsonl'\n")
 	t.Run("user TOML origin", func(t *testing.T) {
 		t.Chdir(work)
-		got, err := load(ConfigFiles{User: user}, nil, nil)
+		got, err := loadWithDemo(ConfigFiles{User: user}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -25,7 +25,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 
 	t.Run("project TOML origin wins", func(t *testing.T) {
 		t.Chdir(work)
-		got, err := load(ConfigFiles{User: user, Project: project}, nil, nil)
+		got, err := loadWithDemo(ConfigFiles{User: user, Project: project}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 
 	t.Run("environment path uses working directory", func(t *testing.T) {
 		t.Chdir(work)
-		got, err := load(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil)
+		got, err := loadWithDemo(ConfigFiles{Project: project}, []string{"CLI_APP_LOG_FILE_PATH=logs/env.jsonl"}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,7 +47,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 	t.Run("changed flag uses working directory", func(t *testing.T) {
 		t.Chdir(work)
 		flags := map[string]FlagValue{"log-file-path": {Value: "logs/flag.jsonl", Changed: true, Source: "--log-file-path"}}
-		got, err := load(ConfigFiles{Project: project}, nil, flags)
+		got, err := loadWithDemo(ConfigFiles{Project: project}, nil, flags)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		absolute := filepath.Join(root, "absolute.jsonl")
 		file := configAt(t, filepath.Join(root, "absolute"), "[log.file]\npath = '"+absolute+"'\n")
 		t.Chdir(work)
-		got, err := load(ConfigFiles{Project: file}, nil, nil)
+		got, err := loadWithDemo(ConfigFiles{Project: file}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,7 +67,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 
 	t.Run("unset file path remains unset", func(t *testing.T) {
 		t.Chdir(work)
-		got, err := load(ConfigFiles{}, nil, nil)
+		got, err := loadWithDemo(ConfigFiles{}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

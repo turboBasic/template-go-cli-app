@@ -22,6 +22,12 @@ func newStyles() styles {
 	}
 }
 
+// StyleHeader applies the shared header style.
+func StyleHeader(value string) string { return newStyles().header.Render(value) }
+
+// StyleStatus applies the shared style for known status values.
+func StyleStatus(value string) string { return newStyles().status(value) }
+
 // status styles a known status and returns any other value unchanged.
 func (s styles) status(value string) string {
 	switch value {

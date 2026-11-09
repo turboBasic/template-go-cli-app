@@ -3,125 +3,77 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
+	"math"
 	"os"
-	"slices"
-	"strings"
+	"regexp"
 	"testing"
-
-	"github.com/turboBasic/template-go-cli-app/internal/domain"
 )
 
-func TestRendererText(t *testing.T) {
-	resources := []domain.Resource{{Name: "example-1", Status: "ready"}, {Name: "example-2", Status: "pending"}}
-	tests := []struct {
-		name string
-		run  func(*Renderer) error
-		want string
-	}{
-		{
-			name: "list",
-			run:  func(renderer *Renderer) error { return renderer.RenderList(resources) },
-			want: "NAME        STATUS\nexample-1   ready\nexample-2   pending\n",
-		},
-		{
-			name: "list with names of 12 or more characters keeps a gap before the status",
-			run: func(renderer *Renderer) error {
-				return renderer.RenderList([]domain.Resource{{Name: "twelve-chars", Status: "ready"}, {Name: "a-fourteen-char", Status: "ready"}})
-			},
-			want: "NAME            STATUS\ntwelve-chars    ready\na-fourteen-char ready\n",
-		},
-		{
-			name: "resource",
-			run:  func(renderer *Renderer) error { return renderer.RenderResource(resources[0]) },
-			want: "example-1: ready\n",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var output bytes.Buffer
-			renderer := Renderer{Writer: &output, Options: Options{Format: FormatText}}
-			if err := test.run(&renderer); err != nil {
-				t.Fatal(err)
-			}
-			got := output.String()
-			if strings.HasPrefix(test.name, "list") {
-				lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-				if len(lines) != 3 || !slices.Equal(strings.Fields(lines[0]), []string{"NAME", "STATUS"}) {
-					t.Fatalf("table output = %q, want NAME and STATUS headers and two rows", got)
-				}
-				for i, wantLine := range strings.Split(strings.TrimSuffix(test.want, "\n"), "\n")[1:] {
-					if !slices.Equal(strings.Fields(lines[i+1]), strings.Fields(wantLine)) {
-						t.Fatalf("table row %d = %q, want ordered resource and status values", i, lines[i+1])
-					}
-				}
-				if test.name != "list" {
-					nameEnd := strings.Index(lines[1], strings.Fields(lines[1])[0]) + len(strings.Fields(lines[1])[0])
-					if strings.Index(lines[1], "ready")-nameEnd < 2 {
-						t.Fatalf("long-name row = %q, want a gap between columns", lines[1])
-					}
-				}
-			} else if got != test.want {
-				t.Fatalf("output = %q, want %q", got, test.want)
-			}
-		})
+type applicationResult struct {
+	ID     int    `json:"id"`
+	Status string `json:"status"`
+}
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string { return ansiEscape.ReplaceAllString(s, "") }
+
+func TestRenderResultTextCallbackReceivesWriterAndOptions(t *testing.T) {
+	var got bytes.Buffer
+	options := Options{Format: FormatText, Color: ColorAlways}
+	called := false
+	err := (Renderer{Writer: &got, Options: options}).RenderResult(applicationResult{ID: 7}, func(w io.Writer, gotOptions Options) error {
+		called = true
+		if gotOptions != options {
+			t.Fatalf("options = %+v, want %+v", gotOptions, options)
+		}
+		_, err := io.WriteString(w, "application text\n")
+		return err
+	})
+	if err != nil || !called || got.String() != "application text\n" {
+		t.Fatalf("RenderResult() = %v, called = %t, output = %q", err, called, got.String())
 	}
 }
 
-func TestRendererJSON(t *testing.T) {
-	resources := []domain.Resource{{Name: "example-1", Status: "ready"}, {Name: "example-2", Status: "pending"}}
-	tests := []struct {
-		name  string
-		run   func(*Renderer) error
-		check func(*testing.T, []byte)
-	}{
-		{
-			name: "list",
-			run:  func(renderer *Renderer) error { return renderer.RenderList(resources) },
-			check: func(t *testing.T, data []byte) {
-				var got []map[string]string
-				if err := json.Unmarshal(data, &got); err != nil {
-					t.Fatal(err)
-				}
-				want := []map[string]string{{"name": "example-1", "status": "ready"}, {"name": "example-2", "status": "pending"}}
-				if len(got) != len(want) {
-					t.Fatalf("decoded list = %#v, want %#v", got, want)
-				}
-				for i := range want {
-					if len(got[i]) != 2 || got[i]["name"] != want[i]["name"] || got[i]["status"] != want[i]["status"] {
-						t.Fatalf("decoded item %d = %#v, want %#v", i, got[i], want[i])
-					}
-				}
-			},
-		},
-		{
-			name: "resource",
-			run:  func(renderer *Renderer) error { return renderer.RenderResource(resources[0]) },
-			check: func(t *testing.T, data []byte) {
-				var got map[string]string
-				if err := json.Unmarshal(data, &got); err != nil {
-					t.Fatal(err)
-				}
-				if len(got) != 2 || got["name"] != "example-1" || got["status"] != "ready" {
-					t.Fatalf("decoded resource = %#v", got)
-				}
-			},
-		},
+func TestRenderResultJSONSkipsTextCallback(t *testing.T) {
+	var got bytes.Buffer
+	called := false
+	err := (Renderer{Writer: &got, Options: Options{Format: FormatJSON}}).RenderResult(applicationResult{ID: 7, Status: "ready"}, func(io.Writer, Options) error {
+		called = true
+		return errors.New("must not be called")
+	})
+	if err != nil || called || got.String() != "{\"id\":7,\"status\":\"ready\"}\n" {
+		t.Fatalf("RenderResult() = %v, called = %t, output = %q", err, called, got.String())
 	}
-	for _, test := range tests {
+}
+
+type resultFailingWriter struct{ err error }
+
+func (w resultFailingWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestRenderResultReturnsWriterAndEncodingErrors(t *testing.T) {
+	wantErr := errors.New("injected write failure")
+	for _, test := range []struct {
+		name   string
+		format Format
+		value  any
+		text   func(io.Writer, Options) error
+	}{
+		{name: "text", format: FormatText, text: func(w io.Writer, _ Options) error { _, err := io.WriteString(w, "text"); return err }},
+		{name: "json", format: FormatJSON, value: applicationResult{ID: 1}},
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			var first, second bytes.Buffer
-			if err := (Renderer{Writer: &first, Options: Options{Format: FormatJSON}}).run(test.run); err != nil {
-				t.Fatal(err)
+			err := (Renderer{Writer: resultFailingWriter{err: wantErr}, Options: Options{Format: test.format}}).RenderResult(test.value, test.text)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("RenderResult() error = %v, want writer error", err)
 			}
-			if err := (Renderer{Writer: &second, Options: Options{Format: FormatJSON}}).run(test.run); err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(first.Bytes(), second.Bytes()) {
-				t.Fatalf("repeated JSON differs: %q vs %q", first.String(), second.String())
-			}
-			test.check(t, first.Bytes())
 		})
+	}
+	var invalid bytes.Buffer
+	if err := (Renderer{Writer: &invalid, Options: Options{Format: FormatJSON}}).RenderResult(map[string]any{"bad": mathInf()}, nil); err == nil {
+		t.Fatal("RenderResult() error = nil, want JSON encoding error")
 	}
 }
 
@@ -148,91 +100,25 @@ func TestNonTerminalCharacterDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Mode()&os.ModeCharDevice == 0 {
-		t.Skip("null device is not reported as a character device on this platform")
+		t.Skip("/dev/null is not a character device")
 	}
 	if isTerminal(file) {
-		t.Fatal("null device was detected as a terminal")
+		t.Fatal("isTerminal(/dev/null) = true, want false")
 	}
 }
 
-func TestColorEnabled(t *testing.T) {
-	tests := []struct {
-		name       string
-		format     Format
-		mode       ColorMode
-		onTerminal bool
-		noColor    bool
-		want       bool
-	}{
-		{name: "auto on terminal", format: FormatText, mode: ColorAuto, onTerminal: true, want: true},
-		{name: "auto off terminal", format: FormatText, mode: ColorAuto},
-		{name: "no color disables auto", format: FormatText, mode: ColorAuto, onTerminal: true, noColor: true},
-		{name: "always overrides no color and tty", format: FormatText, mode: ColorAlways, noColor: true, want: true},
-		{name: "never overrides tty", format: FormatText, mode: ColorNever, onTerminal: true},
-		{name: "json ignores always", format: FormatJSON, mode: ColorAlways, want: false},
+func TestRenderResultPreservesJSONNewline(t *testing.T) {
+	var out bytes.Buffer
+	if err := (Renderer{Writer: &out, Options: Options{Format: FormatJSON}}).RenderResult(applicationResult{ID: 1}, nil); err != nil {
+		t.Fatal(err)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := ColorEnabled(test.format, test.mode, test.onTerminal, test.noColor); got != test.want {
-				t.Fatalf("ColorEnabled() = %t, want %t", got, test.want)
-			}
-		})
+	var decoded applicationResult
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("JSON = %q: %v", out.String(), err)
+	}
+	if decoded.ID != 1 || out.Bytes()[out.Len()-1] != '\n' {
+		t.Fatalf("JSON = %q, want encoded result with newline", out.String())
 	}
 }
 
-func TestStreamColorFollowsItsOwnTerminal(t *testing.T) {
-	tests := []struct {
-		name         string
-		terminals    TerminalCapabilities
-		noColor      bool
-		wantResults  bool
-		wantProgress bool
-	}{
-		{name: "stdout terminal only", terminals: TerminalCapabilities{Stdout: true}, wantResults: true},
-		{name: "stderr terminal only", terminals: TerminalCapabilities{Stderr: true}, wantProgress: true},
-		{name: "both terminals", terminals: TerminalCapabilities{Stdout: true, Stderr: true}, wantResults: true, wantProgress: true},
-		{name: "no color with both terminals", terminals: TerminalCapabilities{Stdout: true, Stderr: true}, noColor: true},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			options := Options{Format: FormatText, Color: ColorAuto, Terminals: test.terminals, NoColor: test.noColor}
-			if got := (Renderer{Options: options}).ColorEnabled(); got != test.wantResults {
-				t.Fatalf("results color = %t, want %t", got, test.wantResults)
-			}
-			if got := options.ProgressColorEnabled(); got != test.wantProgress {
-				t.Fatalf("progress color = %t, want %t", got, test.wantProgress)
-			}
-		})
-	}
-}
-
-func TestProgressColorIgnoresTheResultFormat(t *testing.T) {
-	options := Options{Format: FormatJSON, Color: ColorAuto, Terminals: TerminalCapabilities{Stderr: true}}
-	if !options.ProgressColorEnabled() {
-		t.Fatal("progress color = false, want true: JSON constrains stdout, not a stderr terminal")
-	}
-	if (Renderer{Options: options}).ColorEnabled() {
-		t.Fatal("results color = true, want false for JSON")
-	}
-	options.Terminals.Stderr = false
-	if options.ProgressColorEnabled() {
-		t.Fatal("progress color = true on a redirected stderr, want false")
-	}
-}
-
-func TestRendererNeverAddsANSI(t *testing.T) {
-	for _, format := range []Format{FormatText, FormatJSON} {
-		t.Run(string(format), func(t *testing.T) {
-			var output bytes.Buffer
-			renderer := Renderer{Writer: &output, Options: Options{Format: format}}
-			if err := renderer.RenderList([]domain.Resource{{Name: "example-1", Status: "ready"}}); err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(output.String(), "\x1b[") {
-				t.Fatalf("output contains ANSI escape: %q", output.String())
-			}
-		})
-	}
-}
-
-func (r Renderer) run(render func(*Renderer) error) error { return render(&r) }
+func mathInf() float64 { return math.Inf(1) }

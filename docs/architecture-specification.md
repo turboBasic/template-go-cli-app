@@ -51,8 +51,8 @@ Exact dependency versions are pinned during implementation and maintained under 
 A reasonable layout is:
 
 ```text
-cmd/cli-app/main.go
-internal/cli/{root,resource,config}.go                  # Cobra commands and command wiring
+cmd/cli-app/main.go                                     # application composition and process entry point
+internal/cli/{root.go,config.go,demo_*.go}              # shared root and removable reference command group
 internal/app/{resource,progress,secret}.go              # use cases, orchestration and the secret resolver interface
 internal/domain/{resource}.go                           # models, invariants and business rules
 internal/config/{config,load,provenance,validate}.go    # loading, source metadata and validation
@@ -69,7 +69,9 @@ prek.toml
 README.md
 ```
 
-This layout is a starting point, not a requirement to create every package before it is needed. `cli` calls application use cases and presentation adapters; `app` coordinates domain operations through narrow consumer-owned interfaces; `domain` contains rules and models; `infra` implements external-facing interfaces; `config`, `logging` and `output` own their respective cross-cutting behavior. Application and domain code do not access Koanf directly or emit terminal escape sequences. A separate repository abstraction is not mandatory.
+This layout is a starting point, not a requirement to create every package before it is needed. `cmd/cli-app/main.go` composes the shared root with one application's `CommandRegistration`. `internal/cli/root.go` owns shared runtime setup and teardown; the registered application supplies a static Cobra tree and owns its command policies and dependencies. A selected command initializes its group's dependencies lazily and registers cleanup with `CommandRuntime`. The root stops progress, cancels the operation, runs registered cleanup once with a fresh bounded context, closes logging, and joins cleanup errors with the command error. Help, completion, and configuration inspection do not initialize command dependencies.
+
+`cli` calls application use cases and presentation adapters; `app` coordinates domain operations through narrow consumer-owned interfaces; `domain` contains rules and models; `infra` implements external-facing interfaces; `config`, `logging` and `output` own their respective cross-cutting behavior. Application and domain code do not access Koanf directly or emit terminal escape sequences. A separate repository abstraction is not mandatory.
 
 ## 5. Configuration contract
 
@@ -95,13 +97,17 @@ Configuration locations and discovery:
 
 `.cli-app.example.toml` in the repository root documents every key, commented out at its default. Configuration changes update it in the same change; a test fails when it drifts from the schema.
 
+The shared root registers only shared settings. Each `CommandRegistration` may provide typed application defaults and validation; the loader derives one strict schema from the shared and registered settings, decodes both, and retains one set of per-key source metadata. Application flag mappings explicitly set their config keys and provenance. Environment variables use `CLI_APP_` plus the key uppercased with dots written as underscores; unknown environment variables are ignored. Unknown TOML keys remain errors, including keys left behind after an application group is removed.
+
 The loader retains the source metadata needed for path resolution. `config show [key]` is the single inspection command: it reports effective values and source identities, supports text and JSON output and key filtering, masks sensitive values, and never resolves secret references. Per-key origin tracking and source-relative path resolution may require a metadata-aware loading layer around Koanf.
 
 ## 6. CLI and output contract
 
 Use hierarchical lowercase kebab-case commands, consistent global flags, help, shell completion and version information. Non-interactive use must not unexpectedly prompt. Results go to stdout; diagnostics and progress go to stderr. JSON output remains parseable under normal operation and failures. `text` and `json` output modes, terminal detection, color controls and safe redirected output are supported; Fang and Lip Gloss own presentation. `--color`, `CLI_APP_COLOR` and the config `color` key govern results and progress: `auto` styles a terminal unless `NO_COLOR` is non-empty, `always` styles regardless of `NO_COLOR`, `never` never styles, JSON results are never styled, progress styling follows stderr whatever the result format, and `CLICOLOR_FORCE` does not apply; help and errors follow terminal detection, `NO_COLOR` and `CLICOLOR_FORCE` as Fang does. Domain and application code remain independent of rendering libraries.
 
-The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Every reference command is a demo under `cli-app demo`, named for the one contract it shows: `demo structured-output` shows text and JSON results, `demo not-found` an actionable not-found error with shell completion, `demo secret-credential` a secret reference resolved at run time, `demo long-running` the determinate progress bar, and `demo flaky-dependency` the retry policy turning a transient failure into a success. The demo group and its supporting code are the removal boundary; individual demos need not be independently removable, so they may share services and construction where that keeps the template smaller. Split shared code when selective removal becomes an explicit adopter requirement.
+The reference application is a simulated infrastructure CLI and uses local fixtures without external credentials. Every reference command is a demo under `cli-app demo`, named for the one contract it shows: `demo structured-output` shows text and JSON results, `demo not-found` an actionable not-found error with shell completion, `demo secret-credential` a secret reference resolved at run time, `demo long-running` the determinate progress bar, and `demo flaky-dependency` the retry policy turning a transient failure into a success. The demo group and its supporting code are a removable application example, not a shared-root dependency. Its typed schema, flag mapping, timeout policy, service construction, and result text formatting live with the demo registration and its composition in `cmd/cli-app`. See the [application adoption guide](adopting.md) for the removal sequence.
+
+The shared renderer keeps text/JSON selection, stdout routing, color policy, and JSON encoding. A command passes its application-owned result to `RenderResult` and supplies a text callback receiving the writer and shared `output.Options`; JSON encodes the supplied result normally and does not call the text callback. The demo's resource-to-result conversion and text formatting are demo-owned. Keep output values on stdout and diagnostics, logs, and progress on stderr.
 
 ## 7. Logging and secret handling
 

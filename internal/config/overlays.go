@@ -15,22 +15,35 @@ type FlagValue struct {
 	Source  string
 }
 
-// Load applies environment variables and changed flags above the discovered files.
+// Load applies environment variables and changed flags to shared settings.
 func Load(files ConfigFiles, flags map[string]FlagValue) (LoadResult, error) {
-	return load(files, os.Environ(), flags)
+	return load(files, os.Environ(), flags, ApplicationSettings{})
 }
 
-func load(files ConfigFiles, environment []string, flags map[string]FlagValue) (LoadResult, error) {
+// LoadWithSettings applies the same sources to shared settings and one registered application schema.
+func LoadWithSettings(files ConfigFiles, flags map[string]FlagValue, application ApplicationSettings) (LoadResult, error) {
+	return load(files, os.Environ(), flags, application)
+}
+
+func load(files ConfigFiles, environment []string, flags map[string]FlagValue, application ApplicationSettings) (LoadResult, error) {
 	workingDir, err := os.Getwd()
 	if err != nil {
 		return LoadResult{}, fmt.Errorf("find working directory: %w", err)
 	}
-	return loadAt(files, environment, flags, workingDir)
+	return loadAt(files, environment, flags, workingDir, application)
 }
 
-func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue, workingDir string) (LoadResult, error) {
-	schema := productionSchema()
-	result, err := mergeFiles(files)
+func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue, workingDir string, application ApplicationSettings) (LoadResult, error) {
+	settings := []any{Defaults()}
+	if application.Defaults != nil {
+		settings = append(settings, application.Defaults)
+	}
+	schema, err := settingsSchema(settings...)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	defaults := mergedDefaults(application)
+	result, err := mergeFiles(files, schema, defaults)
 	if err != nil {
 		return LoadResult{}, err
 	}
@@ -66,9 +79,20 @@ func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue,
 	if err := resolvePaths(result.values, result.Sources, workingDir, schema); err != nil {
 		return LoadResult{}, err
 	}
-	result.Config, err = decodeConfig(result.values)
+	result.Config, err = decodeConfig(result.values, Defaults())
 	if err != nil {
 		return LoadResult{}, fmt.Errorf("decode effective configuration: %w", err)
+	}
+	if application.Defaults != nil {
+		result.Application, err = decodeSettings(result.values, application.Defaults)
+		if err != nil {
+			return LoadResult{}, fmt.Errorf("decode effective application settings: %w", err)
+		}
+		if application.Validate != nil {
+			if err := application.Validate(result.Application); err != nil {
+				return LoadResult{}, fmt.Errorf("validate application settings: %w", err)
+			}
+		}
 	}
 	return result, nil
 }

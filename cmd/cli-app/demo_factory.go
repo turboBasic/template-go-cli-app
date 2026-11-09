@@ -15,9 +15,10 @@ import (
 	"github.com/turboBasic/template-go-cli-app/internal/infra/retry"
 )
 
-func newDemoResourceFactory(resources app.ResourceReader) cli.ResourceFactory {
-	return func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		flaky, err := retry.NewStatusReader(memory.NewFlakyReader(app.FlakyFailures), retry.Policy(effective.Retry.Demo.FlakyDependency), retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
+func newDemoResourceFactory(resources app.ResourceReader) cli.DemoFactory {
+	return func(_ context.Context, _ config.Config, effective cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		policy := effective.Retry.Demo.FlakyDependency
+		flaky, err := retry.NewStatusReader(memory.NewFlakyReader(app.FlakyFailures), retry.Policy{MaxAttempts: policy.MaxAttempts, InitialDelay: policy.InitialDelay, MaxDelay: policy.MaxDelay, Jitter: policy.Jitter}, retry.RealClock{}, rand.New(rand.NewSource(time.Now().UnixNano())), retry.WithProgress(progressReporter))
 		if err != nil {
 			return nil, nil, fmt.Errorf("configure status retries: %w", err)
 		}
