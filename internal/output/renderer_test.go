@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -43,7 +44,24 @@ func TestRendererText(t *testing.T) {
 			if err := test.run(&renderer); err != nil {
 				t.Fatal(err)
 			}
-			if got := output.String(); got != test.want {
+			got := output.String()
+			if strings.HasPrefix(test.name, "list") {
+				lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+				if len(lines) != 3 || !slices.Equal(strings.Fields(lines[0]), []string{"NAME", "STATUS"}) {
+					t.Fatalf("table output = %q, want NAME and STATUS headers and two rows", got)
+				}
+				for i, wantLine := range strings.Split(strings.TrimSuffix(test.want, "\n"), "\n")[1:] {
+					if !slices.Equal(strings.Fields(lines[i+1]), strings.Fields(wantLine)) {
+						t.Fatalf("table row %d = %q, want ordered resource and status values", i, lines[i+1])
+					}
+				}
+				if test.name != "list" {
+					nameEnd := strings.Index(lines[1], strings.Fields(lines[1])[0]) + len(strings.Fields(lines[1])[0])
+					if strings.Index(lines[1], "ready")-nameEnd < 2 {
+						t.Fatalf("long-name row = %q, want a gap between columns", lines[1])
+					}
+				}
+			} else if got != test.want {
 				t.Fatalf("output = %q, want %q", got, test.want)
 			}
 		})

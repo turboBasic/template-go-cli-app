@@ -131,6 +131,18 @@ func TestStyledProgressReporterBar(t *testing.T) {
 			t.Errorf("stripped output = %q, want progress information %q", got, message)
 		}
 	}
+	bar, _, found := strings.Cut(got, "50%")
+	runes := []rune(strings.TrimSpace(bar))
+	hasFilledAndRemaining := false
+	for i := 2; found && i < len(runes)-1; i++ {
+		if runes[i] != runes[i-1] {
+			hasFilledAndRemaining = true
+			break
+		}
+	}
+	if !hasFilledAndRemaining {
+		t.Errorf("stripped output = %q, want filled and remaining bar segments", got)
+	}
 }
 
 func TestStyledProgressReporterSerializesConcurrentCalls(t *testing.T) {
