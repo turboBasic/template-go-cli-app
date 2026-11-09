@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -19,8 +18,30 @@ import (
 
 const configID = "cli-app"
 
-// ResourceFactory builds the command's application service and its dependency cleanup.
-type ResourceFactory func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
+// CommandRegistration supplies application commands, settings, and their config mappings.
+type CommandRegistration struct {
+	Settings         config.ApplicationSettings
+	RegisterCommands func(*cobra.Command, *CommandRuntime)
+	FlagValues       func(*cobra.Command) map[string]config.FlagValue
+	OperationTimeout func(*cobra.Command, any) *time.Duration
+}
+
+// CommandRuntime exposes shared facilities to commands after a selected command initializes them.
+type CommandRuntime struct {
+	Configuration   config.LoadResult
+	Renderer        output.Renderer
+	Logger          *slog.Logger
+	Progress        app.ProgressReporter
+	runID           uint64
+	registerCleanup func(func(context.Context) error)
+}
+
+// RegisterCleanup adds command-owned dependency cleanup to the root lifecycle.
+func (r *CommandRuntime) RegisterCleanup(cleanup func(context.Context) error) {
+	if cleanup != nil && r.registerCleanup != nil {
+		r.registerCleanup(cleanup)
+	}
+}
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -29,9 +50,8 @@ type BuildInfo struct {
 	BuildDate string
 }
 
-// NewRootCommandWithFactory builds a command tree that loads config before creating application dependencies.
-func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names []string) *cobra.Command {
-	names = append([]string(nil), names...)
+// NewRootCommand builds a static command tree and installs the shared runtime lifecycle.
+func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "cli-app",
 		Short:   "Manage simulated infrastructure resources",
@@ -58,13 +78,11 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 	flags.StringVar(&color, "color", "auto", "color mode for results and progress (auto, always, never)")
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected operation")
-	var resources *app.ResourceService
-	var renderer output.Renderer
-	var loadResult config.LoadResult
+	runtime := &CommandRuntime{}
 	var logResult logging.Result
 	var cancelOperation context.CancelFunc
 	var stopProgress func()
-	var cleanupDependencies func(context.Context) error
+	var cleanupDependencies []func(context.Context) error
 	cleanupTimeout := config.Defaults().Timeouts.Cleanup
 	var cleanupComplete bool
 	cleanup := func(parentContext context.Context) error {
@@ -81,9 +99,11 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			cancelOperation = nil
 		}
 		var dependencyErr error
-		if cleanupDependencies != nil {
+		if len(cleanupDependencies) > 0 {
 			cleanupContext, cancel := context.WithTimeout(context.WithoutCancel(parentContext), cleanupTimeout)
-			dependencyErr = cleanupDependencies(cleanupContext)
+			for i := len(cleanupDependencies) - 1; i >= 0; i-- {
+				dependencyErr = errors.Join(dependencyErr, cleanupDependencies[i](cleanupContext))
+			}
 			cancel()
 			cleanupDependencies = nil
 			if dependencyErr != nil {
@@ -105,10 +125,12 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			return err
 		}
 		cleanupComplete = false
-		resources = nil
 		stopProgress = nil
-		renderer = output.Renderer{}
-		loadResult = config.LoadResult{}
+		runtime.Configuration = config.LoadResult{}
+		runtime.Renderer = output.Renderer{}
+		runtime.Logger = nil
+		runtime.Progress = nil
+		runtime.runID++
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
@@ -126,17 +148,19 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 			"color":     {Value: color, Changed: flags.Lookup("color").Changed, Source: "--color"},
 			"quiet":     {Value: quiet, Changed: flags.Lookup("quiet").Changed, Source: "--quiet"},
 		}
-		for key, value := range demoFlagValues(cmd) {
-			flagValues[key] = value
+		if registration.FlagValues != nil {
+			for key, value := range registration.FlagValues(cmd) {
+				flagValues[key] = value
+			}
 		}
-		loaded, err := config.LoadWithSettings(files, flagValues, DemoApplicationSettings())
+		loaded, err := config.LoadWithSettings(files, flagValues, registration.Settings)
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
 		}
-		loadResult = loaded
+		runtime.Configuration = loaded
 		cleanupTimeout = loaded.Config.Timeouts.Cleanup
 		noColor := os.Getenv("NO_COLOR") != ""
-		renderer = output.Renderer{
+		runtime.Renderer = output.Renderer{
 			Writer: cmd.OutOrStdout(),
 			Options: output.Options{
 				Format:    output.Format(loaded.Config.Output),
@@ -145,22 +169,31 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 				NoColor:   noColor,
 			},
 		}
-		demoConfig := loaded.Application.(DemoConfig)
-		timeout := configuredOperationTimeout(cmd, demoConfig.Timeouts.Demo)
+		var configuredTimeout *time.Duration
 		if flags.Lookup("timeout").Changed {
 			if timeoutOverride <= 0 {
 				return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeoutOverride))
 			}
-			timeout = &timeoutOverride
+			configuredTimeout = &timeoutOverride
+		} else if registration.OperationTimeout != nil {
+			configuredTimeout = registration.OperationTimeout(cmd, loaded.Application)
 		}
-		if timeout != nil {
-			parentContext := cmd.Context()
-			operationContext, cancel := context.WithTimeout(parentContext, *timeout)
-			cmd.SetContext(operationContext)
-			cancelOperation = func() {
-				cancel()
-				cmd.SetContext(parentContext)
+		applyTimeout := func(command *cobra.Command, configured *time.Duration) error {
+			selected := configured
+			if selected == nil {
+				return nil
 			}
+			if *selected <= 0 {
+				return app.Classify(app.ErrValidation, fmt.Errorf("invalid operation timeout %s: must be positive", *selected))
+			}
+			parentContext := command.Context()
+			operationContext, cancel := context.WithTimeout(parentContext, *selected)
+			command.SetContext(operationContext)
+			cancelOperation = func() { cancel(); command.SetContext(parentContext) }
+			return nil
+		}
+		if err := applyTimeout(cmd, configuredTimeout); err != nil {
+			return err
 		}
 		if cmd.Annotations[inspectionOnly] != "" {
 			return nil
@@ -173,30 +206,23 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		switch {
 		case loaded.Config.Quiet:
 			progressReporter = output.NoopProgressReporter{}
-		case renderer.Options.ProgressColorEnabled():
-			styled := output.NewStyledProgressReporter(cmd.ErrOrStderr(), renderer.Options.Terminals.Stderr)
+		case runtime.Renderer.Options.ProgressColorEnabled():
+			styled := output.NewStyledProgressReporter(cmd.ErrOrStderr(), runtime.Renderer.Options.Terminals.Stderr)
 			stopProgress = styled.Close
 			progressReporter = styled
 		}
-		if factory == nil {
-			return errors.New("resource factory is required")
-		}
-		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, demoConfig, logResult.Logger, progressReporter)
-		if err != nil {
-			return fmt.Errorf("create application dependencies: %w", err)
-		}
-		if resources == nil {
-			return errors.New("resource factory returned no service")
-		}
+		runtime.Logger = logResult.Logger
+		runtime.Progress = progressReporter
 		return nil
 	}
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
 		return cleanup(cmd.Context())
 	}
-	getResources := func() *app.ResourceService { return resources }
-	getRenderer := func() output.Renderer { return renderer }
-	demo := newDemoCommand(getResources, getRenderer, names)
-	root.AddCommand(demo, newConfigCommand(func() []config.Entry { return loadResult.Entries() }, getRenderer))
+	runtime.registerCleanup = func(cleanup func(context.Context) error) { cleanupDependencies = append(cleanupDependencies, cleanup) }
+	if registration.RegisterCommands != nil {
+		registration.RegisterCommands(root, runtime)
+	}
+	root.AddCommand(newConfigCommand(func() []config.Entry { return runtime.Configuration.Entries() }, func() output.Renderer { return runtime.Renderer }))
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})
@@ -250,132 +276,4 @@ func isHelpOrCompletion(cmd *cobra.Command) bool {
 		}
 	}
 	return false
-}
-
-func newDemoStructuredOutputCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
-	return &cobra.Command{
-		Use:   "structured-output",
-		Short: "Demonstrate text and JSON results written to stdout",
-		Long: "Demonstrates the result contract: the resource list is a human table by default and a JSON array with\n" +
-			"--output json, always on stdout. Look at the split: redirect stdout and only the result arrives, with no\n" +
-			"progress or diagnostics mixed in.",
-		Args: validationArgs(cobra.NoArgs),
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			items, err := getResources().List(cmd.Context())
-			if err != nil {
-				return err
-			}
-			return getRenderer().RenderResult(demoResourceResultsFor(items), func(w io.Writer, options output.Options) error {
-				return renderDemoResources(w, options, items)
-			})
-		},
-	}
-}
-
-func newDemoNotFoundCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
-	return &cobra.Command{
-		Use:   "not-found <name>",
-		Short: "Demonstrate an actionable not-found error with shell completion of names",
-		Long: "Demonstrates the error contract: an unknown name fails with exit 1 and a message that names it and lists the\n" +
-			"known names. Look at the message, then press Tab after the command: the shell completes the known names.",
-		Args:              validationArgs(cobra.ExactArgs(1)),
-		ValidArgsFunction: completeResourceNames(names),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resource, err := getResources().Status(cmd.Context(), args[0])
-			if err != nil {
-				return err
-			}
-			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
-				return renderDemoResource(w, options, resource)
-			})
-		},
-	}
-}
-
-func newDemoSecretCredentialCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
-	return &cobra.Command{
-		Use:   "secret-credential <name>",
-		Short: "Demonstrate a secret reference resolved at run time and never printed",
-		Long: "Demonstrates the secret contract: set demo.secret_credential.reference (or\n" +
-			"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE) to a scheme://reference such as an op:// item. The reference is\n" +
-			"resolved only when this command runs, and the secret value never reaches output, logs or `config show`.",
-		Args:              validationArgs(cobra.ExactArgs(1)),
-		ValidArgsFunction: completeResourceNames(names),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resource, err := getResources().Apply(cmd.Context(), args[0])
-			if err != nil {
-				return err
-			}
-			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
-				return renderDemoResource(w, options, resource)
-			})
-		},
-	}
-}
-
-// newDemoCommand groups the template's demonstrations of its contracts. An application built from the
-// template deletes the group, and every demo with it.
-func newDemoCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer, names []string) *cobra.Command {
-	demo := &cobra.Command{
-		Use:   "demo",
-		Short: "Demonstrations of the template's contracts; delete this group in your application",
-		Long: "Demonstrations of the template's contracts, kept so a developer can see each one working and copy it.\n" +
-			"They are not part of an application built from the template: delete this group, and the code it calls.",
-	}
-	rejectUnknownSubcommands(demo)
-	demo.AddCommand(newDemoStructuredOutputCommand(getResources, getRenderer), newDemoNotFoundCommand(getResources, getRenderer, names), newDemoSecretCredentialCommand(getResources, getRenderer, names), newDemoFlakyDependencyCommand(getResources, getRenderer))
-	demo.AddCommand(&cobra.Command{
-		Use:   "long-running",
-		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
-		Long: "Demonstrates determinate progress: a counted operation reports each step with its current and total, and a\n" +
-			"color-capable terminal shows a bar that fills. Redirected stderr keeps plain lines and --quiet silences them. The\n" +
-			"length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
-		Args: validationArgs(cobra.NoArgs),
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return getResources().LongRunning(cmd.Context())
-		},
-	})
-	return demo
-}
-
-func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
-	defaultPolicy := demoDefaults().Retry.Demo.FlakyDependency
-	command := &cobra.Command{
-		Use:   "flaky-dependency",
-		Short: "Demonstrate retries of a read-only dependency that fails transiently",
-		Long: fmt.Sprintf("Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
-			"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
-			"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+
-			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay,jitter} or the matching\n"+
-			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables. --max-attempts overrides max_attempts for one run, and %d or\n"+
-			"fewer shows the failure. --timeout bounds the retries.",
-			app.FlakyFailures, defaultPolicy.MaxAttempts, defaultPolicy.InitialDelay, defaultPolicy.MaxDelay, app.FlakyFailures),
-		Args: validationArgs(cobra.NoArgs),
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			resource, err := getResources().FlakyDependency(cmd.Context())
-			if err != nil {
-				return err
-			}
-			return getRenderer().RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error {
-				return renderDemoResource(w, options, resource)
-			})
-		},
-	}
-	command.Flags().Int("max-attempts", 0, "override retry.demo.flaky_dependency.max_attempts")
-	return command
-}
-
-func completeResourceNames(names []string) cobra.CompletionFunc {
-	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if len(args) != 0 {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		var matches []string
-		for _, name := range names {
-			if strings.HasPrefix(name, toComplete) {
-				matches = append(matches, name)
-			}
-		}
-		return matches, cobra.ShellCompDirectiveNoFileComp
-	}
 }

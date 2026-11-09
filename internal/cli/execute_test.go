@@ -62,7 +62,7 @@ func TestExecuteHelpAndCompletionSkipFactory(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"help"}, {"completion", "bash"}, {"__complete", "demo", ""}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := newTestDemoRoot(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				factoryCalls++
 				return nil, nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
@@ -118,7 +118,7 @@ func TestGroupsRejectUnknownSubcommandsButBareGroupsShowHelp(t *testing.T) {
 	setupConfigEnvironment(t)
 	newCommand := func(args ...string) (*cobra.Command, *int) {
 		calls := 0
-		command := NewRootCommandWithFactory(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		command := newTestDemoRoot(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 			calls++
 			return nil, nil, errors.New("factory must not run")
 		}, testBuildInfo(), nil)

@@ -92,19 +92,3 @@ func validateDemoConfig(c DemoConfig) error {
 	}
 	return nil
 }
-
-func configuredOperationTimeout(cmd *cobra.Command, timeouts demoTimeouts) *time.Duration {
-	if cmd.Parent() == nil || cmd.Parent().Name() != "demo" {
-		return nil
-	}
-	switch strings.ReplaceAll(cmd.Name(), "-", "_") {
-	case "structured_output":
-		return timeouts.StructuredOutput
-	case "not_found":
-		return timeouts.NotFound
-	case "secret_credential":
-		return timeouts.SecretCredential
-	default:
-		return nil
-	}
-}

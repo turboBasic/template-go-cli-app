@@ -17,12 +17,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/cli"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/domain"
 	"github.com/turboBasic/template-go-cli-app/internal/infra/memory"
 )
+
+func newTestDemoRoot(factory cli.DemoFactory, build cli.BuildInfo, names []string) *cobra.Command {
+	return cli.NewRootCommand(cli.NewDemoRegistration(factory, names), build)
+}
 
 func TestBuildInfoIncludesEmbeddedVCSMetadata(t *testing.T) {
 	info, ok := debug.ReadBuildInfo()
@@ -61,7 +66,7 @@ func TestExecuteReportsOutputFailureToStderrAndReturnsFailureCode(t *testing.T) 
 		t.Fatal(err)
 	}
 	reader := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := newTestDemoRoot(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"--config", configPath, "--output", "json", "demo", "structured-output"})
@@ -109,7 +114,7 @@ func TestSignalHelperProcess(t *testing.T) {
 	}
 	resources := memory.NewResourceReader()
 	reader := signalBlockingReader{ResourceReader: resources}
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := newTestDemoRoot(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), func(ctx context.Context) error {
 			_, _ = fmt.Fprintln(os.Stdout, "cleanup started")
 			if os.Getenv("CLI_APP_SIGNAL_HELPER_BLOCK_CLEANUP") == "1" {
@@ -275,7 +280,7 @@ func (r signalBlockingReader) List(ctx context.Context) ([]domain.Resource, erro
 
 func TestUnknownCommandUsesUsageExitCode(t *testing.T) {
 	reader := memory.NewResourceReader()
-	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := newTestDemoRoot(func(_ context.Context, _ config.Config, _ cli.DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"missing"})
