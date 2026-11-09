@@ -17,13 +17,14 @@ func defaultSource() Source { return Source{Kind: KindDefault} }
 
 // LoadResult contains typed settings and the source of every effective leaf.
 type LoadResult struct {
-	Config  Config
-	Sources map[string]Source
-	values  map[string]any
+	Config      Config
+	Application any
+	Sources     map[string]Source
+	values      map[string]any
 }
 
-func mergeFiles(files ConfigFiles) (LoadResult, error) {
-	values := defaultValues()
+func mergeFiles(files ConfigFiles, schema map[string]valueType, defaults map[string]any) (LoadResult, error) {
+	values := defaults
 	sources := make(map[string]Source)
 	for _, leaf := range leaves(values) {
 		sources[leaf.key] = defaultSource()
@@ -40,7 +41,7 @@ func mergeFiles(files ConfigFiles) (LoadResult, error) {
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read configuration %s: %w", path, err)
 		}
-		layer, err := parseTOML(path, data)
+		layer, err := parseTOML(path, data, schema)
 		if err != nil {
 			return LoadResult{}, err
 		}

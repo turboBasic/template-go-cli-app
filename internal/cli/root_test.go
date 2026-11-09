@@ -281,7 +281,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 	var got config.Config
 	var gotLogger *slog.Logger
 	factoryCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
 		got = effective
 		gotLogger = logger
@@ -300,7 +300,6 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Color:    "never",
 		Quiet:    true,
 		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second},
-		Retry:    config.Defaults().Retry,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("factory config = %+v, want %+v", got, want)
@@ -328,7 +327,7 @@ func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 		started:        make(chan time.Time, 1),
 		deadlines:      make(chan time.Time, 1),
 	}
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 	parentContext, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -372,7 +371,7 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 				cleanupDeadline, _ = ctx.Deadline()
 				return nil
 			}
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				if test.setupFailure {
 					return nil, cleanup, errors.New("injected setup failure")
 				}
@@ -405,7 +404,7 @@ func TestExecuteCleansUpAfterNonDemoCommandFailure(t *testing.T) {
 	cleanupErr := errors.New("dependency cleanup failed")
 	cleanupCalls := 0
 	reader := memory.NewResourceReader()
-	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), func(context.Context) error {
 			cleanupCalls++
 			return cleanupErr
@@ -428,7 +427,7 @@ func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 	setupConfigEnvironment(t)
 	cleanupCalls := 0
 	reader := memory.NewResourceReader()
-	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), func(context.Context) error {
 			cleanupCalls++
 			return nil
@@ -449,7 +448,7 @@ func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 func TestGlobalTimeoutAppliesWithoutConfiguredOperationTimeout(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
-	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	root.AddCommand(&cobra.Command{Use: "ordinary", RunE: func(cmd *cobra.Command, _ []string) error {
@@ -478,7 +477,7 @@ func TestExplicitTimeoutOverridesConfiguredOperationTimeout(t *testing.T) {
 		started:        make(chan time.Time, 1),
 		deadlines:      make(chan time.Time, 1),
 	}
-	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 	root.SetArgs([]string{"--config", configFile, "--timeout", "30ms", "demo", "structured-output"})
@@ -513,7 +512,7 @@ func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *t
 	}
 	cleanupContext := make(chan cleanupContextState, 1)
 	cleanupCalls := 0
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), func(ctx context.Context) error {
 			cleanupCalls++
 			deadline, bounded := ctx.Deadline()
@@ -567,7 +566,7 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	}
 	factoryCalls := 0
 	reader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		factoryCalls++
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
@@ -583,7 +582,7 @@ func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 func TestLoggerStaysOffCommandOutput(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"--log-level", "debug", "--output", "json", "demo", "structured-output"})
@@ -755,7 +754,7 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 			if failCommand {
 				reader = failingResourceReader{}
 			}
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				return app.NewResourceService(reader, logger, progressReporter), nil, nil
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"--config", configPath, "demo", "structured-output"})
@@ -823,7 +822,7 @@ func (failingResourceReader) Apply(context.Context, string, app.Secret) (domain.
 func TestFactoryErrorPropagates(t *testing.T) {
 	setupConfigEnvironment(t)
 	wantErr := errors.New("factory failure")
-	command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return nil, nil, wantErr
 	}, testBuildInfo(), nil)
 	command.SetArgs([]string{"demo", "structured-output"})
@@ -841,7 +840,7 @@ func TestHelpAndCompletionSkipConfigurationAndFactory(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				factoryCalls++
 				return nil, nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
@@ -874,7 +873,7 @@ func TestConfigShowSkipsLoggingAndFactory(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			factoryCalls := 0
-			command := NewRootCommandWithFactory(func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				factoryCalls++
 				return nil, nil, errors.New("factory must not run")
 			}, testBuildInfo(), nil)
@@ -908,7 +907,7 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		configs = append(configs, effective)
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), reader.Names())
@@ -952,7 +951,7 @@ func newTestRootCommandWithReader(t *testing.T, reader app.ResourceReader) *cobr
 	} {
 		t.Setenv(name, value)
 	}
-	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter), nil, nil
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 }
@@ -982,7 +981,7 @@ func TestCredentialResolvesOnlyWhenApplying(t *testing.T) {
 			t.Setenv("CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE", "op://vault/item/field")
 			resolver := &countingResolver{}
 			reader := memory.NewResourceReader()
-			command := NewRootCommandWithFactory(func(_ context.Context, effective config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, effective DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				return app.NewResourceService(reader, logger, progressReporter, app.WithCredential(resolver, effective.Demo.SecretCredential.Reference)), nil, nil
 			}, testBuildInfo(), reader.Names())
 			var out bytes.Buffer
@@ -1019,7 +1018,7 @@ func TestDemoLongRunningProgress(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
 			reader := memory.NewResourceReader()
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				return app.NewResourceService(reader, logger, progressReporter, app.WithLongRunningDuration(20*time.Millisecond)), nil, nil
 			}, testBuildInfo(), reader.Names())
 			command.SetArgs(append(append([]string{}, test.args...), "demo", "long-running"))
@@ -1077,7 +1076,7 @@ func TestDemoCommands(t *testing.T) {
 func TestDemoLongRunningHonorsTimeout(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
-	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+	command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 		return app.NewResourceService(reader, logger, progressReporter, app.WithLongRunningDuration(time.Minute)), nil, nil
 	}, testBuildInfo(), reader.Names())
 	command.SetArgs([]string{"demo", "long-running", "--timeout", "50ms"})
@@ -1121,7 +1120,7 @@ func TestFlakyDependencyHelpStatesTheDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := config.Defaults().Retry.Demo.FlakyDependency
+	policy := demoDefaults().Retry.Demo.FlakyDependency
 	for _, want := range []string{
 		fmt.Sprintf("fails %d times", app.FlakyFailures),
 		fmt.Sprintf("allows %d attempts, waits %s", policy.MaxAttempts, policy.InitialDelay),
@@ -1147,7 +1146,7 @@ func TestFlakyDependencyCommand(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
 			reader := memory.NewResourceReader()
-			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
 				return app.NewResourceService(reader, logger, progressReporter, app.WithFlakyDependency(memory.NewFlakyReader(app.FlakyFailures))), nil, nil
 			}, testBuildInfo(), reader.Names())
 			command.SetArgs(test.args)

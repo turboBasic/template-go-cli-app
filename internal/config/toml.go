@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -11,23 +12,56 @@ import (
 
 // DecodeTOML decodes and validates one configuration file before it is merged.
 func DecodeTOML(source string, data []byte) (Config, error) {
-	values, err := parseTOML(source, data)
+	values, err := parseTOML(source, data, schemaFor(Defaults()))
 	if err != nil {
 		return Config{}, err
 	}
-	config, err := decodeConfig(values)
+	config, err := decodeConfig(values, Defaults())
 	if err != nil {
 		return Config{}, fmt.Errorf("decode configuration %s: %w", source, err)
 	}
 	return config, nil
 }
 
-func parseTOML(source string, data []byte) (map[string]any, error) {
+// DecodeTOMLWithSettings decodes shared config and one registered application's typed settings.
+func DecodeTOMLWithSettings(source string, data []byte, application ApplicationSettings) (Config, any, error) {
+	settings := []any{Defaults()}
+	if application.Defaults != nil {
+		settings = append(settings, application.Defaults)
+	}
+	schema, err := settingsSchema(settings...)
+	if err != nil {
+		return Config{}, nil, err
+	}
+	values, err := parseTOML(source, data, schema)
+	if err != nil {
+		return Config{}, nil, err
+	}
+	shared, err := decodeConfig(values, Defaults())
+	if err != nil {
+		return Config{}, nil, fmt.Errorf("decode configuration %s: %w", source, err)
+	}
+	var appSettings any
+	if application.Defaults != nil {
+		appSettings, err = decodeSettings(values, application.Defaults)
+		if err != nil {
+			return Config{}, nil, fmt.Errorf("decode application configuration %s: %w", source, err)
+		}
+		if application.Validate != nil {
+			if err := application.Validate(appSettings); err != nil {
+				return Config{}, nil, fmt.Errorf("validate application configuration %s: %w", source, err)
+			}
+		}
+	}
+	return shared, appSettings, nil
+}
+
+func parseTOML(source string, data []byte, schema map[string]valueType) (map[string]any, error) {
 	values, err := toml.Parser().Unmarshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("decode configuration %s: %w", source, err)
 	}
-	if err := validateValues(source, values, productionSchema(), ""); err != nil {
+	if err := validateValues(source, values, schema, ""); err != nil {
 		return nil, err
 	}
 	return values, nil
@@ -85,8 +119,8 @@ func knownTable(schema map[string]valueType, path string) bool {
 	return false
 }
 
-func decodeConfig(values map[string]any) (Config, error) {
-	for key, kind := range productionSchema() {
+func decodeConfig(values map[string]any, defaults Config) (Config, error) {
+	for key, kind := range schemaFor(defaults) {
 		if kind != durationValue {
 			continue
 		}
@@ -100,7 +134,7 @@ func decodeConfig(values map[string]any) (Config, error) {
 			return Config{}, fmt.Errorf("decode key %q: %w", key, err)
 		}
 	}
-	config := Defaults()
+	config := defaults
 	if err := settings.Unmarshal("", &config); err != nil {
 		return Config{}, err
 	}
@@ -108,6 +142,28 @@ func decodeConfig(values map[string]any) (Config, error) {
 		return Config{}, err
 	}
 	return config, nil
+}
+
+func decodeSettings(values map[string]any, defaults any) (any, error) {
+	for key, kind := range schemaFor(defaults) {
+		if kind == durationValue {
+			if err := decodeDuration(values, key); err != nil {
+				return nil, err
+			}
+		}
+	}
+	settings := koanf.New(".")
+	for key, value := range values {
+		if err := settings.Set(key, value); err != nil {
+			return nil, fmt.Errorf("decode key %q: %w", key, err)
+		}
+	}
+	value := reflect.New(reflect.TypeOf(defaults))
+	value.Elem().Set(reflect.ValueOf(defaults))
+	if err := settings.Unmarshal("", value.Interface()); err != nil {
+		return nil, err
+	}
+	return value.Elem().Interface(), nil
 }
 
 func decodeDuration(values map[string]any, key string) error {

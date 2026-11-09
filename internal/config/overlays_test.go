@@ -15,7 +15,7 @@ func TestLoadFullPrecedence(t *testing.T) {
 	writeFile(t, user, "output = 'text'\n[log]\nlevel = 'info'\n")
 	writeFile(t, project, "[log]\nlevel = 'error'\n")
 
-	got, err := load(ConfigFiles{User: user, Project: project}, []string{
+	got, err := loadWithDemo(ConfigFiles{User: user, Project: project}, []string{
 		"CLI_APP_LOG_LEVEL=warn",
 		"CLI_APP_QUIET=true",
 		"CLI_APP_UNKNOWN=ignored",
@@ -44,7 +44,7 @@ func TestLoadFullPrecedence(t *testing.T) {
 }
 
 func TestLoadUnchangedFlagLeavesEnvironmentEffective(t *testing.T) {
-	got, err := load(ConfigFiles{}, []string{"CLI_APP_LOG_LEVEL=info"}, map[string]FlagValue{
+	got, err := loadWithDemo(ConfigFiles{}, []string{"CLI_APP_LOG_LEVEL=info"}, map[string]FlagValue{
 		"log-level": {Value: "warn", Changed: false, Source: "--log-level"},
 	})
 	if err != nil {
@@ -56,14 +56,14 @@ func TestLoadUnchangedFlagLeavesEnvironmentEffective(t *testing.T) {
 }
 
 func TestLoadInvalidEnvironmentTypeNamesVariable(t *testing.T) {
-	_, err := load(ConfigFiles{}, []string{"CLI_APP_QUIET=sometimes"}, nil)
+	_, err := loadWithDemo(ConfigFiles{}, []string{"CLI_APP_QUIET=sometimes"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "CLI_APP_QUIET") || !strings.Contains(err.Error(), "invalid boolean") {
-		t.Fatalf("load() error = %v, want invalid CLI_APP_QUIET error", err)
+		t.Fatalf("loadWithDemo() error = %v, want invalid CLI_APP_QUIET error", err)
 	}
 }
 
 func TestLoadNestedLoggingEnvironment(t *testing.T) {
-	got, err := load(ConfigFiles{}, []string{
+	got, err := loadWithDemo(ConfigFiles{}, []string{
 		"CLI_APP_LOG_LEVEL=error",
 		"CLI_APP_LOG_FILE_LEVEL=info",
 		"CLI_APP_LOG_FILE_PATH=out/log.jsonl",
@@ -80,20 +80,21 @@ func TestLoadNestedLoggingEnvironment(t *testing.T) {
 }
 
 func TestLoadOperationTimeoutEnvironment(t *testing.T) {
-	got, err := load(ConfigFiles{}, []string{
+	got, err := loadWithDemo(ConfigFiles{}, []string{
 		"CLI_APP_TIMEOUTS_DEMO_NOT_FOUND=90s",
 		"CLI_APP_TIMEOUTS_CLEANUP=3s",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Config.Timeouts.Demo.NotFound == nil || *got.Config.Timeouts.Demo.NotFound != 90*time.Second || got.Config.Timeouts.Cleanup != 3*time.Second {
+	application := got.Application.(testDemoConfig)
+	if application.Timeouts.Demo.NotFound == nil || *application.Timeouts.Demo.NotFound != 90*time.Second || got.Config.Timeouts.Cleanup != 3*time.Second {
 		t.Fatalf("timeouts = %+v, want status 90s and cleanup 3s", got.Config.Timeouts)
 	}
 }
 
 func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
-	got, err := load(ConfigFiles{}, []string{
+	got, err := loadWithDemo(ConfigFiles{}, []string{
 		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_ATTEMPTS=4",
 		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_INITIAL_DELAY=25ms",
 		"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_MAX_DELAY=2s",
@@ -102,9 +103,9 @@ func TestLoadStatusRetryPolicyFromEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := RetryPolicyConfig{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
-	if got.Config.Retry.Demo.FlakyDependency != want {
-		t.Fatalf("status retry policy = %+v, want %+v", got.Config.Retry.Demo.FlakyDependency, want)
+	want := testRetryPolicy{MaxAttempts: 4, InitialDelay: 25 * time.Millisecond, MaxDelay: 2 * time.Second, Jitter: 0.3}
+	if got.Application.(testDemoConfig).Retry.Demo.FlakyDependency != want {
+		t.Fatalf("status retry policy = %+v, want %+v", got.Application.(testDemoConfig).Retry.Demo.FlakyDependency, want)
 	}
 }
 
@@ -130,23 +131,23 @@ func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
 		{name: "empty environment clears", env: []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE="}, want: "", from: "CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := load(ConfigFiles{User: userPath}, test.env, nil)
+			got, err := loadWithDemo(ConfigFiles{User: userPath}, test.env, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Config.Demo.SecretCredential.Reference != test.want || got.Sources["demo.secret_credential.reference"].Origin != test.from {
-				t.Fatalf("credential/source = %q/%+v, want %q/%q", got.Config.Demo.SecretCredential.Reference, got.Sources["demo.secret_credential.reference"], test.want, test.from)
+			if got.Application.(testDemoConfig).Demo.SecretCredential.Reference != test.want || got.Sources["demo.secret_credential.reference"].Origin != test.from {
+				t.Fatalf("credential/source = %q/%+v, want %q/%q", got.Application.(testDemoConfig).Demo.SecretCredential.Reference, got.Sources["demo.secret_credential.reference"], test.want, test.from)
 			}
 		})
 	}
-	if _, err := load(ConfigFiles{}, []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE=hunter2"}, nil); err == nil || !strings.Contains(err.Error(), "demo.secret_credential.reference") {
-		t.Fatalf("load() error = %v, want a demo.secret_credential.reference validation error", err)
+	if _, err := loadWithDemo(ConfigFiles{}, []string{"CLI_APP_DEMO_SECRET_CREDENTIAL_REFERENCE=hunter2"}, nil); err == nil || !strings.Contains(err.Error(), "demo.secret_credential.reference") {
+		t.Fatalf("loadWithDemo() error = %v, want a demo.secret_credential.reference validation error", err)
 	}
 }
 
 func TestLoadRejectsFlagWithoutKey(t *testing.T) {
-	_, err := load(ConfigFiles{}, nil, map[string]FlagValue{"no-such-flag": {Value: "debug", Source: "--no-such-flag"}})
+	_, err := loadWithDemo(ConfigFiles{}, nil, map[string]FlagValue{"no-such-flag": {Value: "debug", Source: "--no-such-flag"}})
 	if err == nil || !strings.Contains(err.Error(), "--no-such-flag") {
-		t.Fatalf("load() error = %v, want an error naming --no-such-flag", err)
+		t.Fatalf("loadWithDemo() error = %v, want an error naming --no-such-flag", err)
 	}
 }

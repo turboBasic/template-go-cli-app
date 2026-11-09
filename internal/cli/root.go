@@ -20,7 +20,7 @@ import (
 const configID = "cli-app"
 
 // ResourceFactory builds the command's application service and its dependency cleanup.
-type ResourceFactory func(context.Context, config.Config, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
+type ResourceFactory func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
 
 // BuildInfo is the version metadata embedded in the executable.
 type BuildInfo struct {
@@ -129,7 +129,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		for key, value := range demoFlagValues(cmd) {
 			flagValues[key] = value
 		}
-		loaded, err := config.Load(files, flagValues)
+		loaded, err := config.LoadWithSettings(files, flagValues, DemoApplicationSettings())
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
 		}
@@ -145,7 +145,8 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 				NoColor:   noColor,
 			},
 		}
-		timeout := configuredOperationTimeout(cmd, loaded.Config.Timeouts.Demo)
+		demoConfig := loaded.Application.(DemoConfig)
+		timeout := configuredOperationTimeout(cmd, demoConfig.Timeouts.Demo)
 		if flags.Lookup("timeout").Changed {
 			if timeoutOverride <= 0 {
 				return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeoutOverride))
@@ -180,7 +181,7 @@ func NewRootCommandWithFactory(factory ResourceFactory, build BuildInfo, names [
 		if factory == nil {
 			return errors.New("resource factory is required")
 		}
-		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, logResult.Logger, progressReporter)
+		resources, cleanupDependencies, err = factory(cmd.Context(), loaded.Config, demoConfig, logResult.Logger, progressReporter)
 		if err != nil {
 			return fmt.Errorf("create application dependencies: %w", err)
 		}
@@ -338,7 +339,7 @@ func newDemoCommand(getResources func() *app.ResourceService, getRenderer func()
 }
 
 func newDemoFlakyDependencyCommand(getResources func() *app.ResourceService, getRenderer func() output.Renderer) *cobra.Command {
-	defaultPolicy := config.Defaults().Retry.Demo.FlakyDependency
+	defaultPolicy := demoDefaults().Retry.Demo.FlakyDependency
 	command := &cobra.Command{
 		Use:   "flaky-dependency",
 		Short: "Demonstrate retries of a read-only dependency that fails transiently",

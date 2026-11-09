@@ -1,12 +1,87 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
+
+type independentSettings struct {
+	Widget independentWidget `koanf:"widget"`
+}
+type independentWidget struct {
+	Name  string        `koanf:"name"`
+	Delay time.Duration `koanf:"delay"`
+	Mode  string        `koanf:"mode"`
+	Alias string        `koanf:"alias"`
+}
+
+func TestRegisteredApplicationSettingsUseAllSourcesAndProvenance(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.toml")
+	writeFile(t, path, "[widget]\nname = 'from-file'\ndelay = '2s'\n")
+	registration := ApplicationSettings{Defaults: independentSettings{Widget: independentWidget{Name: "default", Delay: time.Second, Mode: "safe"}}, Validate: func(value any) error {
+		if value.(independentSettings).Widget.Name == "" {
+			return fmt.Errorf("widget.name is required")
+		}
+		return nil
+	}}
+	got, err := load(ConfigFiles{Project: path}, []string{"CLI_APP_WIDGET_NAME=from-env", "CLI_APP_WIDGET_ALIAS=env-alias"}, map[string]FlagValue{
+		"widget-name": {Value: "from-flag", Changed: true, Source: "--widget-name"},
+	}, registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := independentSettings{Widget: independentWidget{Name: "from-flag", Delay: 2 * time.Second, Mode: "safe", Alias: "env-alias"}}
+	if !reflect.DeepEqual(got.Application, want) {
+		t.Fatalf("application settings = %+v, want %+v", got.Application, want)
+	}
+	for key, wantSource := range map[string]Source{"widget.name": {Kind: KindFlag, Origin: "--widget-name"}, "widget.delay": {Kind: KindProjectFile, Origin: path}, "widget.alias": {Kind: KindEnvironment, Origin: "CLI_APP_WIDGET_ALIAS"}} {
+		if got.Sources[key] != wantSource {
+			t.Errorf("source %s = %+v, want %+v", key, got.Sources[key], wantSource)
+		}
+	}
+	if got.Sources["widget.mode"].Kind != KindDefault {
+		t.Errorf("widget.mode source = %+v, want default", got.Sources["widget.mode"])
+	}
+	if _, err := load(ConfigFiles{}, []string{"CLI_APP_WIDGET_NAME="}, nil, registration); err == nil || !strings.Contains(err.Error(), "widget.name is required") {
+		t.Fatalf("application validation error = %v", err)
+	}
+	unknownPath := filepath.Join(t.TempDir(), "unknown.toml")
+	writeFile(t, unknownPath, "[widget]\nunknown = 'rejected'\n")
+	if _, err := load(ConfigFiles{Project: unknownPath}, nil, nil, registration); err == nil || !strings.Contains(err.Error(), `unknown key "widget.unknown"`) {
+		t.Fatalf("unknown application key error = %v", err)
+	}
+}
+
+func TestRegisteredSettingsRejectCollisionsAndSharedOnlyRejectsRemovedKeys(t *testing.T) {
+	type collision struct {
+		Output string `koanf:"output"`
+	}
+	if _, err := settingsSchema(Defaults(), collision{}); err == nil || !strings.Contains(err.Error(), "output") {
+		t.Fatalf("schema collision error = %v", err)
+	}
+	type tableCollision struct {
+		Log string `koanf:"log"`
+	}
+	if _, err := settingsSchema(Defaults(), tableCollision{}); err == nil || !strings.Contains(err.Error(), "log") {
+		t.Fatalf("table schema collision error = %v", err)
+	}
+	sharedPath := filepath.Join(t.TempDir(), "shared.toml")
+	writeFile(t, sharedPath, "output = 'json'\n")
+	shared, err := Load(ConfigFiles{Project: sharedPath}, nil)
+	if err != nil || shared.Config.Output != "json" {
+		t.Fatalf("shared-only load = %+v, %v", shared.Config, err)
+	}
+	demoPath := filepath.Join(t.TempDir(), "removed.toml")
+	writeFile(t, demoPath, "[demo.secret_credential]\nreference = 'op://vault/item/field'\n")
+	if _, err := Load(ConfigFiles{Project: demoPath}, nil); err == nil || !strings.Contains(err.Error(), "unknown key") {
+		t.Fatalf("shared-only demo key error = %v, want unknown key", err)
+	}
+}
 
 func TestLoadFilePrecedenceAndSources(t *testing.T) {
 	root := t.TempDir()
@@ -19,7 +94,7 @@ func TestLoadFilePrecedenceAndSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := load(ConfigFiles{User: userPath, Project: projectPath}, nil, nil)
+	got, err := loadWithDemo(ConfigFiles{User: userPath, Project: projectPath}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +166,7 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := load(ConfigFiles{User: userPath}, nil, nil)
+	got, err := loadWithDemo(ConfigFiles{User: userPath}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

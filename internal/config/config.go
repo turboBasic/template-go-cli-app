@@ -5,21 +5,18 @@ import (
 	"time"
 )
 
-// Config contains the supported Stage 1 application settings.
+// Config contains settings shared by every command group.
 type Config struct {
 	Log      LogConfig     `koanf:"log"`
 	Output   string        `koanf:"output"`
 	Color    string        `koanf:"color"`
 	Quiet    bool          `koanf:"quiet"`
 	Timeouts TimeoutConfig `koanf:"timeouts"`
-	Retry    RetryConfig   `koanf:"retry"`
-	Demo     DemoConfig    `koanf:"demo"`
 }
 
-// TimeoutConfig defines per-operation timeouts and the dependency cleanup bound.
+// TimeoutConfig defines the shared dependency cleanup bound.
 type TimeoutConfig struct {
 	Cleanup time.Duration `koanf:"cleanup"`
-	Demo    DemoTimeouts  `koanf:"demo"`
 }
 
 // LogConfig contains the settings for local log destinations.
@@ -42,7 +39,6 @@ func Defaults() Config {
 		Output:   "text",
 		Color:    "auto",
 		Timeouts: TimeoutConfig{Cleanup: 5 * time.Second},
-		Retry:    demoRetryDefaults(),
 	}
 }
 
@@ -63,7 +59,7 @@ func (c Config) Validate() error {
 	if c.Timeouts.Cleanup <= 0 {
 		return fmt.Errorf("invalid timeouts.cleanup %s: must be positive", c.Timeouts.Cleanup)
 	}
-	return c.validateDemo()
+	return nil
 }
 
 func oneOf(value string, choices ...string) bool {

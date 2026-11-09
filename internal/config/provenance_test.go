@@ -13,7 +13,7 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 
 	result, err := loadAt(files, []string{"CLI_APP_COLOR=never"}, map[string]FlagValue{
 		"quiet": {Value: true, Changed: true, Source: "--quiet"},
-	}, root)
+	}, root, demoTestRegistration())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 func TestEntriesReportWinningLayerWhenFilePathsMatch(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shared.toml")
 	writeFile(t, path, "output = 'json'\n")
-	result, err := loadAt(ConfigFiles{User: path, Project: path}, nil, nil, filepath.Dir(path))
+	result, err := loadAt(ConfigFiles{User: path, Project: path}, nil, nil, filepath.Dir(path), demoTestRegistration())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestEntriesUnsourcedLeafIsUnknown(t *testing.T) {
 
 func TestEntriesReportJitterOverrideWithItsSource(t *testing.T) {
 	root := t.TempDir()
-	result, err := loadAt(ConfigFiles{}, []string{"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.2"}, nil, root)
+	result, err := loadAt(ConfigFiles{}, []string{"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_JITTER=0.2"}, nil, root, demoTestRegistration())
 	if err != nil {
 		t.Fatal(err)
 	}
