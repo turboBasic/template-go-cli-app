@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -16,7 +15,7 @@ import (
 // application dependencies; the root hook stops after building the renderer for it.
 const inspectionOnly = "inspection-only"
 
-func newConfigCommand(getEntries func() []config.Entry, getRenderer func() output.Renderer, cleanup func(context.Context) error) *cobra.Command {
+func newConfigCommand(getEntries func() []config.Entry, getRenderer func() output.Renderer) *cobra.Command {
 	group := &cobra.Command{Use: "config", Short: "Inspect configuration"}
 	rejectUnknownSubcommands(group)
 	show := &cobra.Command{
@@ -35,7 +34,6 @@ func newConfigCommand(getEntries func() []config.Entry, getRenderer func() outpu
 			return getRenderer().RenderConfig(maskSensitive(entries))
 		},
 	}
-	closeAfterRun(show, cleanup)
 	group.AddCommand(show)
 	return group
 }

@@ -275,7 +275,9 @@ func (r signalBlockingReader) List(ctx context.Context) ([]domain.Resource, erro
 
 func TestUnknownCommandUsesUsageExitCode(t *testing.T) {
 	reader := memory.NewResourceReader()
-	command := cli.NewRootCommand(reader, cli.BuildInfo{}, reader.Names())
+	command := cli.NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+	}, cli.BuildInfo{}, reader.Names())
 	command.SetArgs([]string{"missing"})
 	var stderr bytes.Buffer
 	command.SetErr(&stderr)
