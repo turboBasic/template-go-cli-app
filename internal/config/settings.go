@@ -17,7 +17,11 @@ type ApplicationSettings struct {
 func settingsSchema(defaults ...any) (map[string]valueType, error) {
 	schema := make(map[string]valueType)
 	for _, setting := range defaults {
-		for key, kind := range schemaFor(setting) {
+		fields, err := schemaFor(setting)
+		if err != nil {
+			return nil, err
+		}
+		for key, kind := range fields {
 			for existing := range schema {
 				if existing == key || strings.HasPrefix(existing, key+".") || strings.HasPrefix(key, existing+".") {
 					return nil, fmt.Errorf("configuration schema collision between %q and %q", existing, key)
@@ -29,25 +33,33 @@ func settingsSchema(defaults ...any) (map[string]valueType, error) {
 	return schema, nil
 }
 
-func schemaFor(settings any) map[string]valueType {
+func schemaFor(settings any) (map[string]valueType, error) {
 	typ := reflect.TypeOf(settings)
 	if typ == nil || typ.Kind() != reflect.Struct {
 		panic("configuration defaults must be a struct")
 	}
 	schema := make(map[string]valueType)
-	var walk func(reflect.Type, string)
-	walk = func(typ reflect.Type, prefix string) {
+	var walk func(reflect.Type, string) error
+	walk = func(typ reflect.Type, prefix string) error {
 		for field := range typ.Fields() {
 			key := prefix + field.Tag.Get("koanf")
 			if field.Type.Kind() == reflect.Struct {
-				walk(field.Type, key+".")
+				if err := walk(field.Type, key+"."); err != nil {
+					return err
+				}
 				continue
+			}
+			if _, exists := schema[key]; exists {
+				return fmt.Errorf("configuration schema has duplicate key %q in %s", key, typ)
 			}
 			schema[key] = valueTypeOf(field)
 		}
+		return nil
 	}
-	walk(typ, "")
-	return schema
+	if err := walk(typ, ""); err != nil {
+		return nil, err
+	}
+	return schema, nil
 }
 
 func mergedDefaults(application ApplicationSettings) map[string]any {

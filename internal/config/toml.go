@@ -12,7 +12,11 @@ import (
 
 // DecodeTOML decodes and validates one configuration file before it is merged.
 func DecodeTOML(source string, data []byte) (Config, error) {
-	values, err := parseTOML(source, data, schemaFor(Defaults()))
+	schema, err := schemaFor(Defaults())
+	if err != nil {
+		return Config{}, err
+	}
+	values, err := parseTOML(source, data, schema)
 	if err != nil {
 		return Config{}, err
 	}
@@ -120,7 +124,11 @@ func knownTable(schema map[string]valueType, path string) bool {
 }
 
 func decodeConfig(values map[string]any, defaults Config) (Config, error) {
-	for key, kind := range schemaFor(defaults) {
+	schema, err := schemaFor(defaults)
+	if err != nil {
+		return Config{}, err
+	}
+	for key, kind := range schema {
 		if kind != durationValue {
 			continue
 		}
@@ -145,7 +153,11 @@ func decodeConfig(values map[string]any, defaults Config) (Config, error) {
 }
 
 func decodeSettings(values map[string]any, defaults any) (any, error) {
-	for key, kind := range schemaFor(defaults) {
+	schema, err := schemaFor(defaults)
+	if err != nil {
+		return nil, err
+	}
+	for key, kind := range schema {
 		if kind == durationValue {
 			if err := decodeDuration(values, key); err != nil {
 				return nil, err

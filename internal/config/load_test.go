@@ -70,6 +70,13 @@ func TestRegisteredSettingsRejectCollisionsAndSharedOnlyRejectsRemovedKeys(t *te
 	if _, err := settingsSchema(Defaults(), tableCollision{}); err == nil || !strings.Contains(err.Error(), "log") {
 		t.Fatalf("table schema collision error = %v", err)
 	}
+	type duplicate struct {
+		First  string `koanf:"setting"`
+		Second int    `koanf:"setting"`
+	}
+	if _, err := settingsSchema(Defaults(), duplicate{}); err == nil || !strings.Contains(err.Error(), "setting") {
+		t.Fatalf("duplicate application key error = %v", err)
+	}
 	sharedPath := filepath.Join(t.TempDir(), "shared.toml")
 	writeFile(t, sharedPath, "output = 'json'\n")
 	shared, err := Load(ConfigFiles{Project: sharedPath}, nil)
