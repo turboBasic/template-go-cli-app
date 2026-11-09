@@ -32,13 +32,13 @@ func TestLoadFullPrecedence(t *testing.T) {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
 	for key, wantSource := range map[string]Source{
-		"log.level": "--log-level",
-		"output":    "--output",
-		"quiet":     "CLI_APP_QUIET",
-		"color":     defaultSource,
+		"log.level": {Kind: KindFlag, Origin: "--log-level"},
+		"output":    {Kind: KindFlag, Origin: "--output"},
+		"quiet":     {Kind: KindEnvironment, Origin: "CLI_APP_QUIET"},
+		"color":     defaultSource(),
 	} {
 		if got.Sources[key] != wantSource {
-			t.Errorf("source for %q = %q, want %q", key, got.Sources[key], wantSource)
+			t.Errorf("source for %q = %+v, want %+v", key, got.Sources[key], wantSource)
 		}
 	}
 }
@@ -50,8 +50,8 @@ func TestLoadUnchangedFlagLeavesEnvironmentEffective(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Config.Log.Level != "info" || got.Sources["log.level"] != "CLI_APP_LOG_LEVEL" {
-		t.Fatalf("effective console log level/source = %q/%q, want info/CLI_APP_LOG_LEVEL", got.Config.Log.Level, got.Sources["log.level"])
+	if got.Config.Log.Level != "info" || got.Sources["log.level"] != (Source{Kind: KindEnvironment, Origin: "CLI_APP_LOG_LEVEL"}) {
+		t.Fatalf("effective console log level/source = %q/%+v, want info/CLI_APP_LOG_LEVEL", got.Config.Log.Level, got.Sources["log.level"])
 	}
 }
 
@@ -74,8 +74,8 @@ func TestLoadNestedLoggingEnvironment(t *testing.T) {
 	if got.Config.Log.Level != "error" || got.Config.Log.File.Level != "info" {
 		t.Fatalf("logging levels = %q/%q, want error/info", got.Config.Log.Level, got.Config.Log.File.Level)
 	}
-	if filepath.Base(got.Config.Log.File.Path) != "log.jsonl" || got.Sources["log.file.path"] != "CLI_APP_LOG_FILE_PATH" {
-		t.Fatalf("file path/source = %q/%q, want working-directory path from CLI_APP_LOG_FILE_PATH", got.Config.Log.File.Path, got.Sources["log.file.path"])
+	if filepath.Base(got.Config.Log.File.Path) != "log.jsonl" || got.Sources["log.file.path"] != (Source{Kind: KindEnvironment, Origin: "CLI_APP_LOG_FILE_PATH"}) {
+		t.Fatalf("file path/source = %q/%+v, want working-directory path from CLI_APP_LOG_FILE_PATH", got.Config.Log.File.Path, got.Sources["log.file.path"])
 	}
 }
 
@@ -134,8 +134,8 @@ func TestLoadCredentialFromFileAndEnvironment(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Config.Demo.SecretCredential.Reference != test.want || got.Sources["demo.secret_credential.reference"] != Source(test.from) {
-				t.Fatalf("credential/source = %q/%q, want %q/%q", got.Config.Demo.SecretCredential.Reference, got.Sources["demo.secret_credential.reference"], test.want, test.from)
+			if got.Config.Demo.SecretCredential.Reference != test.want || got.Sources["demo.secret_credential.reference"].Origin != test.from {
+				t.Fatalf("credential/source = %q/%+v, want %q/%q", got.Config.Demo.SecretCredential.Reference, got.Sources["demo.secret_credential.reference"], test.want, test.from)
 			}
 		})
 	}

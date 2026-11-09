@@ -29,15 +29,15 @@ func TestLoadFilePrecedenceAndSources(t *testing.T) {
 		t.Fatalf("Config = %+v, want %+v", got.Config, want)
 	}
 	for key, want := range map[string]Source{
-		"log.level":      Source(projectPath),
-		"log.file.level": defaultSource,
-		"log.file.path":  defaultSource,
-		"output":         Source(userPath),
-		"color":          defaultSource,
-		"quiet":          defaultSource,
+		"log.level":      {Kind: KindProjectFile, Origin: projectPath},
+		"log.file.level": defaultSource(),
+		"log.file.path":  defaultSource(),
+		"output":         {Kind: KindUserFile, Origin: userPath},
+		"color":          defaultSource(),
+		"quiet":          defaultSource(),
 	} {
 		if got.Sources[key] != want {
-			t.Errorf("source for %q = %q, want %q", key, got.Sources[key], want)
+			t.Errorf("source for %q = %+v, want %+v", key, got.Sources[key], want)
 		}
 	}
 }
@@ -49,20 +49,20 @@ func TestMergeLayerRecursivelyAndReplacesArrays(t *testing.T) {
 		"name":   "base",
 	}
 	sources := map[string]Source{
-		"server.host": defaultSource,
-		"server.port": defaultSource,
-		"tags":        defaultSource,
-		"name":        defaultSource,
+		"server.host": defaultSource(),
+		"server.port": defaultSource(),
+		"tags":        defaultSource(),
+		"name":        defaultSource(),
 	}
 	mergeLayer(values, map[string]any{
 		"server": map[string]any{"port": int64(90)},
 		"tags":   []any{"user", "only"},
 		"name":   "user",
-	}, Source("user.toml"), sources)
+	}, Source{Kind: KindUserFile, Origin: "user.toml"}, sources)
 	mergeLayer(values, map[string]any{
 		"server": map[string]any{"host": "production"},
 		"tags":   []any{"project"},
-	}, Source("project.toml"), sources)
+	}, Source{Kind: KindProjectFile, Origin: "project.toml"}, sources)
 
 	want := map[string]any{
 		"server": map[string]any{"host": "production", "port": int64(90)},
@@ -73,10 +73,10 @@ func TestMergeLayerRecursivelyAndReplacesArrays(t *testing.T) {
 		t.Fatalf("merged values = %#v, want %#v", values, want)
 	}
 	wantSources := map[string]Source{
-		"server.host": "project.toml",
-		"server.port": "user.toml",
-		"tags":        "project.toml",
-		"name":        "user.toml",
+		"server.host": {Kind: KindProjectFile, Origin: "project.toml"},
+		"server.port": {Kind: KindUserFile, Origin: "user.toml"},
+		"tags":        {Kind: KindProjectFile, Origin: "project.toml"},
+		"name":        {Kind: KindUserFile, Origin: "user.toml"},
 	}
 	if !reflect.DeepEqual(sources, wantSources) {
 		t.Fatalf("sources = %#v, want %#v", sources, wantSources)
@@ -95,17 +95,18 @@ func TestEveryEffectiveLeafHasASource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Sources["timeouts.cleanup"] != defaultSource {
-		t.Errorf("source for timeouts.cleanup = %q, want %q", got.Sources["timeouts.cleanup"], defaultSource)
+	if got.Sources["timeouts.cleanup"] != defaultSource() {
+		t.Errorf("source for timeouts.cleanup = %+v, want %+v", got.Sources["timeouts.cleanup"], defaultSource())
 	}
 	if got.Config.Timeouts.Cleanup != 5*time.Second {
 		t.Errorf("Timeouts.Cleanup = %s, want 5s", got.Config.Timeouts.Cleanup)
 	}
-	if got.Sources["timeouts.demo.structured_output"] != Source(userPath) || got.Sources["retry.demo.flaky_dependency.max_attempts"] != Source(userPath) {
-		t.Errorf("user-file sources = %q, %q, want %q", got.Sources["timeouts.demo.structured_output"], got.Sources["retry.demo.flaky_dependency.max_attempts"], userPath)
+	wantSource := Source{Kind: KindUserFile, Origin: userPath}
+	if got.Sources["timeouts.demo.structured_output"] != wantSource || got.Sources["retry.demo.flaky_dependency.max_attempts"] != wantSource {
+		t.Errorf("user-file sources = %+v, %+v, want %+v", got.Sources["timeouts.demo.structured_output"], got.Sources["retry.demo.flaky_dependency.max_attempts"], wantSource)
 	}
 	for _, leaf := range leaves(got.values) {
-		if got.Sources[leaf.key] == "" {
+		if got.Sources[leaf.key].Kind == "" {
 			t.Errorf("leaf %q has no source", leaf.key)
 		}
 	}

@@ -47,7 +47,7 @@ func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue,
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read environment variable %s: %w", name, err)
 		}
-		mergeLayer(result.values, nestedValue(key, parsed), Source(name), result.Sources)
+		mergeLayer(result.values, nestedValue(key, parsed), Source{Kind: KindEnvironment, Origin: name}, result.Sources)
 	}
 	for key, flag := range flags {
 		target := strings.ReplaceAll(key, "-", ".")
@@ -61,7 +61,7 @@ func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue,
 		if err != nil {
 			return LoadResult{}, fmt.Errorf("read flag %s: %w", flagSource(key, flag), err)
 		}
-		mergeLayer(result.values, nestedValue(target, parsed), Source(flagSource(key, flag)), result.Sources)
+		mergeLayer(result.values, nestedValue(target, parsed), Source{Kind: KindFlag, Origin: flagSource(key, flag)}, result.Sources)
 	}
 	if err := resolvePaths(result.values, result.Sources, workingDir, schema); err != nil {
 		return LoadResult{}, err

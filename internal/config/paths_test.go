@@ -20,7 +20,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertLoggingPath(t, got, filepath.Join(filepath.Dir(user), "logs/user.jsonl"), Source(user))
+		assertLoggingPath(t, got, filepath.Join(filepath.Dir(user), "logs/user.jsonl"), Source{Kind: KindUserFile, Origin: user})
 	})
 
 	t.Run("project TOML origin wins", func(t *testing.T) {
@@ -29,7 +29,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertLoggingPath(t, got, filepath.Join(filepath.Dir(project), "logs/project.jsonl"), Source(project))
+		assertLoggingPath(t, got, filepath.Join(filepath.Dir(project), "logs/project.jsonl"), Source{Kind: KindProjectFile, Origin: project})
 		if got.Config.Log.Level != "warn" {
 			t.Errorf("console level changed during path resolution: %q", got.Config.Log.Level)
 		}
@@ -41,7 +41,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertLoggingPath(t, got, filepath.Join(work, "logs/env.jsonl"), "CLI_APP_LOG_FILE_PATH")
+		assertLoggingPath(t, got, filepath.Join(work, "logs/env.jsonl"), Source{Kind: KindEnvironment, Origin: "CLI_APP_LOG_FILE_PATH"})
 	})
 
 	t.Run("changed flag uses working directory", func(t *testing.T) {
@@ -51,7 +51,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertLoggingPath(t, got, filepath.Join(work, "logs/flag.jsonl"), "--log-file-path")
+		assertLoggingPath(t, got, filepath.Join(work, "logs/flag.jsonl"), Source{Kind: KindFlag, Origin: "--log-file-path"})
 	})
 
 	t.Run("absolute path is preserved", func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestLoggingFilePathSourceResolution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertLoggingPath(t, got, absolute, Source(file))
+		assertLoggingPath(t, got, absolute, Source{Kind: KindProjectFile, Origin: file})
 	})
 
 	t.Run("unset file path remains unset", func(t *testing.T) {
@@ -93,6 +93,6 @@ func assertLoggingPath(t *testing.T, got LoadResult, want string, source Source)
 		t.Errorf("logging file path = %q, want %q", got.Config.Log.File.Path, want)
 	}
 	if got.Sources["log.file.path"] != source {
-		t.Errorf("logging file path source = %q, want %q", got.Sources["log.file.path"], source)
+		t.Errorf("logging file path source = %+v, want %+v", got.Sources["log.file.path"], source)
 	}
 }

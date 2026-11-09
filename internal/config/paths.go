@@ -64,13 +64,12 @@ func nestedSet(values map[string]any, key string, value any) {
 }
 
 func pathBase(source Source, workingDir string) (string, error) {
-	identity := string(source)
-	if identity == "" || identity == string(defaultSource) || strings.HasPrefix(identity, "CLI_APP_") || strings.HasPrefix(identity, "--") {
+	if source.Kind != KindUserFile && source.Kind != KindProjectFile {
 		return workingDir, nil
 	}
-	file, err := filepath.Abs(identity)
+	file, err := filepath.Abs(source.Origin)
 	if err != nil {
-		return "", fmt.Errorf("resolve source %q: %w", identity, err)
+		return "", fmt.Errorf("resolve source %q: %w", source.Origin, err)
 	}
 	return filepath.Dir(file), nil
 }
