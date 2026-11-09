@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/turboBasic/template-go-cli-app/internal/app"
 	"github.com/turboBasic/template-go-cli-app/internal/config"
 	"github.com/turboBasic/template-go-cli-app/internal/output"
 )
@@ -43,6 +45,8 @@ func TestReplacementRegistrationUsesSharedTextAndJSONRenderer(t *testing.T) {
 						if runtime.Configuration.Application.(replacementSettings).Label != "sample" || runtime.Logger == nil || runtime.Progress == nil {
 							return fmt.Errorf("shared runtime or registered config was not populated")
 						}
+						runtime.Logger.Debug("replacement command")
+						runtime.Progress.Report(app.ProgressEvent{Phase: "complete", Message: "replacement ready"})
 						return runtime.Renderer.RenderResult(result, func(w io.Writer, options output.Options) error {
 							textCalls++
 							if options.Format != output.FormatText {
@@ -58,12 +62,15 @@ func TestReplacementRegistrationUsesSharedTextAndJSONRenderer(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			root.SetOut(&stdout)
 			root.SetErr(&stderr)
-			root.SetArgs([]string{"--output", test.format, "replacement"})
+			root.SetArgs([]string{"--log-level", "debug", "--output", test.format, "replacement"})
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
 			if stdout.String() != test.want {
 				t.Fatalf("stdout = %q, want %q", stdout.String(), test.want)
+			}
+			if !strings.Contains(stderr.String(), "msg=\"replacement command\"") || !strings.Contains(stderr.String(), "replacement ready") {
+				t.Fatalf("stderr = %q, want replacement log and progress", stderr.String())
 			}
 			if textCalls != test.wantTextCalls {
 				t.Fatalf("text callback calls = %d, want %d", textCalls, test.wantTextCalls)
