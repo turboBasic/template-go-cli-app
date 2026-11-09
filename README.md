@@ -40,7 +40,8 @@ just build
 ```
 
 See the [architecture specification][architecture] for the planned application structure and
-capabilities. [Contributing][contributing] covers setup and pull requests.
+capabilities. [Adopting the template][adopting] explains how to replace the demo command group while
+keeping the shared runtime. [Contributing][contributing] covers setup and pull requests.
 
 ### Releases
 
@@ -60,6 +61,7 @@ GitHub downloads stay available.
 [MIT][license].
 
 [architecture]: docs/architecture-specification.md
+[adopting]: docs/adopting.md
 [ci]: https://github.com/turboBasic/template-go-cli-app/actions/workflows/ci.yml?query=branch%3Amain
 [ci-badge]: https://github.com/turboBasic/template-go-cli-app/actions/workflows/ci.yml/badge.svg?branch=main
 [contributing]: CONTRIBUTING.md
