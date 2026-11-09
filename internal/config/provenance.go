@@ -1,9 +1,6 @@
 package config
 
-import (
-	"strings"
-	"time"
-)
+import "time"
 
 // SourceKind names the layer category that supplied an effective value.
 type SourceKind string
@@ -37,26 +34,12 @@ func (r LoadResult) Entries() []Entry {
 		if duration, ok := value.(time.Duration); ok {
 			value = duration.String()
 		}
-		kind, origin := classify(r.Sources[leaf.key], r.files)
-		entries = append(entries, Entry{Key: leaf.key, Value: value, Source: kind, Origin: origin})
+		source := r.Sources[leaf.key]
+		kind := source.Kind
+		if kind == "" {
+			kind = KindUnknown
+		}
+		entries = append(entries, Entry{Key: leaf.key, Value: value, Source: kind, Origin: source.Origin})
 	}
 	return entries
-}
-
-// classify compares against the discovered files first, so a file path that starts with "--" is still a file.
-func classify(source Source, files ConfigFiles) (SourceKind, string) {
-	switch {
-	case source == defaultSource:
-		return KindDefault, ""
-	case files.User != "" && string(source) == files.User:
-		return KindUserFile, string(source)
-	case files.Project != "" && string(source) == files.Project:
-		return KindProjectFile, string(source)
-	case strings.HasPrefix(string(source), "--"):
-		return KindFlag, string(source)
-	case strings.HasPrefix(string(source), "CLI_APP_"):
-		return KindEnvironment, string(source)
-	default:
-		return KindUnknown, string(source)
-	}
 }

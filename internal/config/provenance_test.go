@@ -46,11 +46,22 @@ func TestEntriesClassifyEverySource(t *testing.T) {
 	}
 }
 
-func TestEntriesFileStartingWithDashesIsStillAFile(t *testing.T) {
-	kind, origin := classify("--odd.toml", ConfigFiles{Project: "--odd.toml"})
-	if kind != KindProjectFile || origin != "--odd.toml" {
-		t.Errorf("classify = (%q, %q), want project file", kind, origin)
+func TestEntriesReportWinningLayerWhenFilePathsMatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "shared.toml")
+	writeFile(t, path, "output = 'json'\n")
+	result, err := loadAt(ConfigFiles{User: path, Project: path}, nil, nil, filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, entry := range result.Entries() {
+		if entry.Key == "output" {
+			if entry.Source != KindProjectFile || entry.Origin != path {
+				t.Errorf("output source = (%q, %q), want project file %q", entry.Source, entry.Origin, path)
+			}
+			return
+		}
+	}
+	t.Fatal("no output entry")
 }
 
 func TestEntriesUnsourcedLeafIsUnknown(t *testing.T) {

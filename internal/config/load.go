@@ -7,26 +7,32 @@ import (
 	"slices"
 )
 
-// Source identifies the configuration layer that supplied an effective value.
-type Source string
+// Source identifies the configuration layer and origin that supplied a value.
+type Source struct {
+	Kind   SourceKind
+	Origin string
+}
 
-const defaultSource Source = "default"
+func defaultSource() Source { return Source{Kind: KindDefault} }
 
 // LoadResult contains typed settings and the source of every effective leaf.
 type LoadResult struct {
 	Config  Config
 	Sources map[string]Source
 	values  map[string]any
-	files   ConfigFiles
 }
 
 func mergeFiles(files ConfigFiles) (LoadResult, error) {
 	values := defaultValues()
 	sources := make(map[string]Source)
 	for _, leaf := range leaves(values) {
-		sources[leaf.key] = defaultSource
+		sources[leaf.key] = defaultSource()
 	}
-	for _, path := range []string{files.User, files.Project} {
+	for _, file := range []struct {
+		path string
+		kind SourceKind
+	}{{files.User, KindUserFile}, {files.Project, KindProjectFile}} {
+		path := file.path
 		if path == "" {
 			continue
 		}
@@ -38,9 +44,9 @@ func mergeFiles(files ConfigFiles) (LoadResult, error) {
 		if err != nil {
 			return LoadResult{}, err
 		}
-		mergeLayer(values, layer, Source(path), sources)
+		mergeLayer(values, layer, Source{Kind: file.kind, Origin: path}, sources)
 	}
-	return LoadResult{Sources: sources, values: values, files: files}, nil
+	return LoadResult{Sources: sources, values: values}, nil
 }
 
 type leaf struct {
