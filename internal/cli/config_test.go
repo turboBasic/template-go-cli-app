@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -44,7 +45,9 @@ func configShowFixture(t *testing.T) (user, project string, newCommand func(args
 	t.Setenv("CLI_APP_COLOR", "never")
 	return user, project, func(args ...string) (*cobra.Command, *bytes.Buffer) {
 		reader := memory.NewResourceReader()
-		command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+		command := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			return app.NewResourceService(reader, logger, progressReporter), nil, nil
+		}, testBuildInfo(), reader.Names())
 		var out bytes.Buffer
 		command.SetOut(&out)
 		command.SetErr(&bytes.Buffer{})
@@ -166,7 +169,7 @@ func TestConfigShowMasksSensitiveValues(t *testing.T) {
 		t.Run(string(format), func(t *testing.T) {
 			var out bytes.Buffer
 			renderer := output.Renderer{Writer: &out, Options: output.Options{Format: format, Color: output.ColorNever}}
-			command := newConfigCommand(func() []config.Entry { return entries }, func() output.Renderer { return renderer }, func(context.Context) error { return nil })
+			command := newConfigCommand(func() []config.Entry { return entries }, func() output.Renderer { return renderer })
 			command.SetArgs([]string{"show"})
 			if err := command.Execute(); err != nil {
 				t.Fatal(err)

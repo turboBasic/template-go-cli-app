@@ -299,7 +299,7 @@ func TestFactoryReceivesEffectiveConfigBeforeCommand(t *testing.T) {
 		Output:   "json",
 		Color:    "never",
 		Quiet:    true,
-		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second, Demo: config.DemoTimeouts{StructuredOutput: durationPointer(2 * time.Minute)}},
+		Timeouts: config.TimeoutConfig{Cleanup: 5 * time.Second},
 		Retry:    config.Defaults().Retry,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -336,7 +336,8 @@ func TestConfiguredResourceTimeoutReachesAdapter(t *testing.T) {
 	command.SetContext(parentContext)
 	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	command.SetOut(&bytes.Buffer{})
-	if err := command.Execute(); !errors.Is(err, app.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	command.SetErr(io.Discard)
+	if err := Execute(context.Background(), command); !errors.Is(err, app.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want timeout classification and context.DeadlineExceeded", err)
 	}
 	started := <-reader.started
@@ -379,7 +380,8 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"demo", "structured-output"})
 			command.SetOut(&bytes.Buffer{})
-			err := command.Execute()
+			command.SetErr(io.Discard)
+			err := Execute(context.Background(), command)
 			if test.setupFailure || test.operationFailure {
 				if err == nil {
 					t.Fatal("Execute() error = nil, want failure")
@@ -394,6 +396,102 @@ func TestDependencyCleanupOnceAcrossCommandOutcomes(t *testing.T) {
 				t.Fatalf("cleanup context err/deadline = %v/%v, want live bounded context", cleanupErr, cleanupDeadline)
 			}
 		})
+	}
+}
+
+func TestExecuteCleansUpAfterNonDemoCommandFailure(t *testing.T) {
+	setupConfigEnvironment(t)
+	commandErr := errors.New("ordinary command failed")
+	cleanupErr := errors.New("dependency cleanup failed")
+	cleanupCalls := 0
+	reader := memory.NewResourceReader()
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), func(context.Context) error {
+			cleanupCalls++
+			return cleanupErr
+		}, nil
+	}, testBuildInfo(), reader.Names())
+	root.AddCommand(&cobra.Command{Use: "ordinary", RunE: func(*cobra.Command, []string) error { return commandErr }})
+	root.SetArgs([]string{"ordinary"})
+	root.SetErr(io.Discard)
+
+	err := Execute(context.Background(), root)
+	if !errors.Is(err, commandErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("Execute() error = %v, want command and cleanup errors", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want one", cleanupCalls)
+	}
+}
+
+func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
+	setupConfigEnvironment(t)
+	cleanupCalls := 0
+	reader := memory.NewResourceReader()
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), func(context.Context) error {
+			cleanupCalls++
+			return nil
+		}, nil
+	}, testBuildInfo(), reader.Names())
+	root.AddCommand(&cobra.Command{Use: "ordinary", Run: func(*cobra.Command, []string) {}})
+	root.SetArgs([]string{"ordinary"})
+	root.SetErr(io.Discard)
+
+	if err := Execute(context.Background(), root); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want one", cleanupCalls)
+	}
+}
+
+func TestGlobalTimeoutAppliesWithoutConfiguredOperationTimeout(t *testing.T) {
+	setupConfigEnvironment(t)
+	reader := memory.NewResourceReader()
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+	}, testBuildInfo(), reader.Names())
+	root.AddCommand(&cobra.Command{Use: "ordinary", RunE: func(cmd *cobra.Command, _ []string) error {
+		if _, ok := cmd.Context().Deadline(); !ok {
+			return errors.New("operation context has no deadline")
+		}
+		<-cmd.Context().Done()
+		return cmd.Context().Err()
+	}})
+	root.SetArgs([]string{"--timeout", "20ms", "ordinary"})
+	root.SetErr(io.Discard)
+
+	if err := Execute(context.Background(), root); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want command deadline", err)
+	}
+}
+
+func TestExplicitTimeoutOverridesConfiguredOperationTimeout(t *testing.T) {
+	setupConfigEnvironment(t)
+	configFile := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(configFile, []byte("[timeouts.demo]\nstructured_output = '2s'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := blockingTimeoutReader{
+		ResourceReader: memory.NewResourceReader(),
+		started:        make(chan time.Time, 1),
+		deadlines:      make(chan time.Time, 1),
+	}
+	root := NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+	}, testBuildInfo(), memory.NewResourceReader().Names())
+	root.SetArgs([]string{"--config", configFile, "--timeout", "30ms", "demo", "structured-output"})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+
+	if err := Execute(context.Background(), root); !errors.Is(err, app.ErrTimeout) {
+		t.Fatalf("Execute() error = %v, want operation timeout", err)
+	}
+	started := <-reader.started
+	deadline := <-reader.deadlines
+	if remaining := deadline.Sub(started); remaining < 10*time.Millisecond || remaining > 300*time.Millisecond {
+		t.Fatalf("adapter deadline interval = %s, want explicit 30ms timeout instead of configured 2s", remaining)
 	}
 }
 
@@ -425,7 +523,8 @@ func TestDependencyCleanupGetsFreshBoundedContextAfterOperationCancellation(t *t
 	}, testBuildInfo(), memory.NewResourceReader().Names())
 	command.SetArgs([]string{"--config", configFile, "demo", "structured-output"})
 	command.SetOut(&bytes.Buffer{})
-	if err := command.Execute(); !errors.Is(err, context.DeadlineExceeded) {
+	command.SetErr(io.Discard)
+	if err := Execute(context.Background(), command); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Execute() error = %v, want operation deadline", err)
 	}
 	if cleanupCalls != 1 {
@@ -459,8 +558,6 @@ func (r blockingTimeoutReader) List(ctx context.Context) ([]domain.Resource, err
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
-
-func durationPointer(duration time.Duration) *time.Duration { return &duration }
 
 func TestLoggingInitializationFailurePreventsFactory(t *testing.T) {
 	setupConfigEnvironment(t)
@@ -515,7 +612,7 @@ func TestApplyProgressRespectsQuietAndKeepsJSONResult(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
-			command := NewRootCommand(memory.NewResourceReader(), testBuildInfo(), memory.NewResourceReader().Names())
+			command := newTestRootCommand(t)
 			args := []string{"--output", "json"}
 			if test.quiet {
 				args = append(args, "--quiet")
@@ -558,7 +655,7 @@ func TestApplyProgressColor(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			setupConfigEnvironment(t)
-			command := NewRootCommand(memory.NewResourceReader(), testBuildInfo(), memory.NewResourceReader().Names())
+			command := newTestRootCommand(t)
 			command.SetArgs(append(append([]string{}, test.args...), "demo", "secret-credential", "example-2"))
 			var stdout, stderr bytes.Buffer
 			command.SetOut(&stdout)
@@ -587,7 +684,7 @@ func TestApplyProgressColor(t *testing.T) {
 
 func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
 	setupConfigEnvironment(t)
-	command := NewRootCommand(failingResourceReader{}, testBuildInfo(), memory.NewResourceReader().Names())
+	command := newTestRootCommandWithReader(t, failingResourceReader{})
 	command.SetArgs([]string{"--quiet", "demo", "secret-credential", "example-1"})
 	var stdout, stderr bytes.Buffer
 	command.SetOut(&stdout)
@@ -603,7 +700,7 @@ func TestQuietDoesNotSuppressApplyErrors(t *testing.T) {
 func TestProgressWriterErrorsDoNotReplaceApplyResult(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
-	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+	command := newTestRootCommandWithReader(t, reader)
 	command.SetArgs([]string{"--output", "json", "demo", "secret-credential", "example-1"})
 	var stdout bytes.Buffer
 	command.SetOut(&stdout)
@@ -663,7 +760,8 @@ func TestConfiguredFilePathAndCleanupAcrossCommandResults(t *testing.T) {
 			}, testBuildInfo(), memory.NewResourceReader().Names())
 			command.SetArgs([]string{"--config", configPath, "demo", "structured-output"})
 			command.SetOut(&bytes.Buffer{})
-			err = command.Execute()
+			command.SetErr(io.Discard)
+			err = Execute(context.Background(), command)
 			if failCommand && (err == nil || !strings.Contains(err.Error(), "injected reader failure")) {
 				t.Fatalf("Execute() error = %v, want injected reader error", err)
 			}
@@ -840,6 +938,10 @@ func testBuildInfo() BuildInfo {
 }
 
 func newTestRootCommand(t *testing.T) *cobra.Command {
+	return newTestRootCommandWithReader(t, memory.NewResourceReader())
+}
+
+func newTestRootCommandWithReader(t *testing.T, reader app.ResourceReader) *cobra.Command {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "no-user-config"))
 	for name, value := range map[string]string{
@@ -850,8 +952,9 @@ func newTestRootCommand(t *testing.T) *cobra.Command {
 	} {
 		t.Setenv(name, value)
 	}
-	reader := memory.NewResourceReader()
-	return NewRootCommand(reader, testBuildInfo(), reader.Names())
+	return NewRootCommandWithFactory(func(_ context.Context, _ config.Config, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+		return app.NewResourceService(reader, logger, progressReporter), nil, nil
+	}, testBuildInfo(), memory.NewResourceReader().Names())
 }
 
 type countingResolver struct{ calls int }
@@ -1013,7 +1116,7 @@ func TestDemoCommandsAreDemonstrations(t *testing.T) {
 
 func TestFlakyDependencyHelpStatesTheDefaults(t *testing.T) {
 	reader := memory.NewResourceReader()
-	command := NewRootCommand(reader, testBuildInfo(), reader.Names())
+	command := newTestRootCommandWithReader(t, reader)
 	demo, _, err := command.Find([]string{"demo", "flaky-dependency"})
 	if err != nil {
 		t.Fatal(err)

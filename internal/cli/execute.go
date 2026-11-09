@@ -27,15 +27,36 @@ func Execute(ctx context.Context, root *cobra.Command) error {
 			}
 		}
 	}
+	postRun := root.PersistentPostRunE
+	root.PersistentPostRunE = nil
+	defer func() { root.PersistentPostRunE = postRun }()
+	finished := false
+	finish := func() error {
+		if finished {
+			return nil
+		}
+		finished = true
+		if postRun == nil {
+			return nil
+		}
+		return postRun(root, nil)
+	}
 	reported := false
+	var reportedErr error
 	err := fang.Execute(ctx, root,
 		fang.WithoutManpage(),
 		fang.WithoutVersion(),
 		fang.WithErrorHandler(func(w io.Writer, styles fang.Styles, err error) {
 			reported = true
-			reportError(w, styles, withCause(ctx, err))
+			reportedErr = errors.Join(err, finish())
+			reportError(w, styles, withCause(ctx, reportedErr))
 		}),
 	)
+	if reported {
+		err = reportedErr
+	} else {
+		err = errors.Join(err, finish())
+	}
 	joined := withCause(ctx, err)
 	if joined != nil && !reported {
 		_, _ = fmt.Fprintln(root.ErrOrStderr(), joined)
