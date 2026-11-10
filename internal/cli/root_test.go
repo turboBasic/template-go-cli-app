@@ -72,7 +72,7 @@ func TestApplicationGroupsRejectOperationHandlers(t *testing.T) {
 	}
 }
 
-func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
+func TestApplicationCommandsRejectPersistentLifecycleHooks(t *testing.T) {
 	for _, execute := range []struct {
 		name string
 		run  func(*cobra.Command) error
@@ -81,14 +81,22 @@ func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
 		{name: "cli Execute", run: func(root *cobra.Command) error { return Execute(context.Background(), root) }},
 	} {
 		for _, test := range []struct {
-			name string
-			set  func(*cobra.Command, func())
+			name      string
+			wantError string
+			wantHint  string
+			set       func(*cobra.Command, func())
 		}{
-			{name: "PersistentPreRun", set: func(command *cobra.Command, called func()) {
+			{name: "PersistentPreRun", wantError: "persistent pre-run", wantHint: "setup policy", set: func(command *cobra.Command, called func()) {
 				command.PersistentPreRun = func(*cobra.Command, []string) { called() }
 			}},
-			{name: "PersistentPreRunE", set: func(command *cobra.Command, called func()) {
+			{name: "PersistentPreRunE", wantError: "persistent pre-run", wantHint: "setup policy", set: func(command *cobra.Command, called func()) {
 				command.PersistentPreRunE = func(*cobra.Command, []string) error { called(); return nil }
+			}},
+			{name: "PersistentPostRun", wantError: "persistent post-run", wantHint: "RegisterCleanup", set: func(command *cobra.Command, called func()) {
+				command.PersistentPostRun = func(*cobra.Command, []string) { called() }
+			}},
+			{name: "PersistentPostRunE", wantError: "persistent post-run", wantHint: "RegisterCleanup", set: func(command *cobra.Command, called func()) {
+				command.PersistentPostRunE = func(*cobra.Command, []string) error { called(); return nil }
 			}},
 		} {
 			for _, target := range []string{"root", "group", "leaf"} {
@@ -117,7 +125,9 @@ func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
 					if target == "root" {
 						wantCommand = "root"
 					}
-					if err := execute.run(root); err == nil || !strings.Contains(err.Error(), "persistent pre-run") || !strings.Contains(err.Error(), wantCommand) {
+					err := execute.run(root)
+					if err == nil || !strings.Contains(err.Error(), test.wantError) ||
+						!strings.Contains(err.Error(), wantCommand) || !strings.Contains(err.Error(), test.wantHint) {
 						t.Fatalf("Execute() error = %v, want actionable hook error", err)
 					}
 					if hookCalls != 0 || setupCalls != 0 || handlerCalls != 0 {
@@ -126,6 +136,48 @@ func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestExecutePreservesCleanupWhenRegistrationOverridesPostRun(t *testing.T) {
+	setupConfigEnvironment(t)
+	for _, test := range []struct {
+		name string
+		set  func(*cobra.Command)
+	}{
+		{name: "PersistentPostRun", set: func(root *cobra.Command) {
+			root.PersistentPostRun = func(*cobra.Command, []string) {}
+		}},
+		{name: "PersistentPostRunE", set: func(root *cobra.Command) {
+			root.PersistentPostRunE = func(*cobra.Command, []string) error { return nil }
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cleanupCalls := 0
+			cleanupErr := errors.New("registered cleanup failed")
+			root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+				runtime.RegisterCleanup(func(context.Context) error {
+					cleanupCalls++
+					return cleanupErr
+				})
+				test.set(root)
+				root.AddCommand(&cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}})
+			}}, testBuildInfo())
+			root.SetArgs([]string{"run"})
+			var stderr bytes.Buffer
+			root.SetErr(&stderr)
+
+			err := Execute(context.Background(), root)
+			if err == nil || !strings.Contains(err.Error(), "persistent post-run") || !errors.Is(err, cleanupErr) {
+				t.Fatalf("Execute() error = %v, want hook rejection and cleanup error", err)
+			}
+			if cleanupCalls != 1 {
+				t.Fatalf("cleanup calls = %d, want one", cleanupCalls)
+			}
+			if strings.Count(stderr.String(), cleanupErr.Error()) != 1 {
+				t.Fatalf("stderr = %q, want cleanup error reported once", stderr.String())
+			}
+		})
 	}
 }
 

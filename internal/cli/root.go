@@ -92,7 +92,7 @@ type BuildInfo struct {
 // NewRootCommand builds one standalone execution's static command tree and shared runtime lifecycle.
 // Create a fresh registration and root for each execution. Application groups with children are
 // help-only; put application operations on leaf commands. Application commands must not define
-// persistent pre-run hooks; use setup policies instead.
+// persistent pre-run or post-run hooks; use setup policies and RegisterCleanup instead.
 func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "cli-app",
@@ -273,9 +273,6 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		}
 		return nil
 	}
-	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
-		return cleanup(cmd.Context())
-	}
 	runtime.registerCleanup = func(cleanup func(context.Context) error) {
 		cleanupDependencies = append(cleanupDependencies, cleanup)
 	}
@@ -286,8 +283,15 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	if root.PersistentPreRun != nil || root.PersistentPreRunE != nil {
 		groupErr = errors.Join(groupErr, errors.New("root command must not define persistent pre-run hooks; use a setup policy"))
 	}
+	if root.PersistentPostRun != nil || root.PersistentPostRunE != nil {
+		groupErr = errors.Join(groupErr, errors.New("root command must not define persistent post-run hooks; use RegisterCleanup"))
+	}
 	root.PersistentPreRun = nil
 	root.PersistentPreRunE = preRun
+	root.PersistentPostRun = nil
+	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+		return cleanup(cmd.Context())
+	}
 	root.AddCommand(
 		newConfigCommand(
 			func() []config.Entry { return runtime.Configuration.Entries() },
@@ -316,6 +320,13 @@ func setApplicationGroupHelp(root *cobra.Command) error {
 			))
 			command.PersistentPreRun = nil
 			command.PersistentPreRunE = nil
+		}
+		if command.PersistentPostRun != nil || command.PersistentPostRunE != nil {
+			groupErr = errors.Join(groupErr, fmt.Errorf(
+				"command %q must not define persistent post-run hooks; use RegisterCleanup", command.CommandPath(),
+			))
+			command.PersistentPostRun = nil
+			command.PersistentPostRunE = nil
 		}
 		children := command.Commands()
 		if len(children) > 0 {
