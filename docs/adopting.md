@@ -4,14 +4,64 @@ The template's `demo` group is an example application, not a dependency of the s
 
 ## Register your application
 
-In `cmd/cli-app/main.go`, construct the root with `cli.NewRootCommand(registration, buildInfo())`. Define a `cli.CommandRegistration` with:
+Give one `CommandRegistration` the application's combined settings schema, with one struct containing every group's settings. The loader validates the shared and application settings together, preserving precedence, provenance, and strict unknown-key checks. In this example, `applicationSchema` is the matching `config.ApplicationSettings`. `PrepareApplication` checks the loaded application value once and returns the value that the runtime and application closures use:
 
-- `Settings`: a struct of application defaults tagged with `koanf` keys and an optional validator. The loader combines this schema with shared settings, validates the union, and preserves precedence and provenance. Map command flags to config keys with `FlagValues`; choose a command-specific timeout with `OperationTimeout` when needed.
-- `RegisterCommands`: add a static Cobra command tree. The callback receives `*cli.CommandRuntime`, which exposes the loaded shared and application settings, shared renderer, logger, and progress reporter.
+```go
+var settings applicationSettings
 
-Keep dependency construction in the selected command's `RunE` path. Cache a dependency in a group object when sibling commands share it. Call `runtime.RegisterCleanup` as soon as cleanup is known, including after partial setup, so the root can run it on setup errors too. The root runs registered cleanups once in reverse registration order, with a live context bounded by `timeouts.cleanup`; cleanup errors are joined with command errors.
+registration := cli.CommandRegistration{
+  Settings: applicationSchema,
+  PrepareApplication: func(value any) (any, error) {
+    loaded, ok := value.(applicationSettings)
+    if !ok {
+      return nil, errors.New("expected application settings")
+    }
+    settings = loaded
+    return loaded, nil
+  },
+}
+```
 
-Render an application-owned result with `runtime.Renderer.RenderResult(result, renderText)`. The text callback receives an `io.Writer` and `output.Options`; JSON uses the result's ordinary JSON encoding and skips the callback. Keep results on stdout and logs or progress on stderr. Resolve secrets only inside the operation that needs them.
+In `RegisterCommands`, add a static Cobra tree and associate setup and timeout policies with the command objects as you create them. A group can declare its default setup and typed timeout selector:
+
+```go
+runtime.SetCommandPolicy(groupCommand, cli.CommandPolicy{
+  Setup: cli.SetupPolicy{Declared: true, Run: group.setup},
+  Timeout: func(*cobra.Command) *time.Duration {
+    return settings.Worker.Timeout
+  },
+})
+```
+
+A command with no setup declaration inherits the nearest ancestor's setup. A child can replace it with its own `SetupPolicy{Declared: true, Run: child.setup}`; `SetupPolicy{Declared: true}` explicitly skips inherited setup. The root runs only the nearest selected setup. `--timeout` overrides the selected command's configured timeout.
+
+Add each child to its group and the group to the root after attaching its policy. A timeout selector closes over the checked application settings; the shared root never needs an application type or command name.
+
+Setup builds the group's service before its handler runs. Register cleanup as soon as it is available, including when setup fails after partial construction:
+
+```go
+service, cleanup, err := buildService(cmd.Context(), runtime.Configuration.Config, settings.Worker)
+runtime.RegisterCleanup(cleanup)
+if err != nil {
+  return err
+}
+if service == nil {
+  return errors.New("worker service factory returned no service")
+}
+group.service = service
+return nil
+```
+
+The operation deadline covers setup and the handler. The root stops progress, cancels the operation, runs cleanup once in reverse registration order under a fresh context bounded by `timeouts.cleanup`, closes logging, and joins cleanup errors with the operation error. Help and completion skip configuration loading; `config show` loads and validates configuration without setting up dependencies or resolving secrets. Resolve secret values only inside the operation that needs them.
+
+Build a new root for every execution:
+
+```go
+root := cli.NewRootCommand(registration, buildInfo())
+return cli.Execute(ctx, root)
+```
+
+Render an application-owned result with `runtime.Renderer.RenderResult(result, renderText)`. The text callback receives an `io.Writer` and `output.Options`; JSON uses the result's ordinary JSON encoding and skips the callback. Keep results on stdout and logs or progress on stderr. Wrap returned errors with an actionable operation message and retain their causes.
 
 ## Remove the reference demo
 

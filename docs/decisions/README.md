@@ -25,7 +25,8 @@ Accepted decisions for the [architecture specification][architecture-specificati
 | [ADR-0020: Stage definitions of done and scope freeze][ADR-0020]                            | superseded |
 | [ADR-0021: The template carries the minimum code that demonstrates each contract][ADR-0021] | accepted   |
 | [ADR-0022: Reference commands are demos named for the contract they demonstrate][ADR-0022]  | accepted   |
-| [ADR-0023: Application commands register behind the shared CLI runtime][ADR-0023]           | accepted   |
+| [ADR-0023: Application commands register behind the shared CLI runtime][ADR-0023]           | superseded |
+| [ADR-0024: Application composition owns selected-command lifecycle policies][ADR-0024]      | accepted   |
 
 ## Source and rationale note
 
@@ -54,3 +55,4 @@ This export is grounded in the retrieved final specification, accepted ADR regis
 [ADR-0021]: 0021-the-template-carries-the-minimum-code-that-demonstrates-each-contract.md
 [ADR-0022]: 0022-reference-commands-are-demos-named-for-their-contract.md
 [ADR-0023]: 0023-replaceable-command-composition.md
+[ADR-0024]: 0024-application-composition-owns-selected-command-lifecycle.md

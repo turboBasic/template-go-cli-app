@@ -1,11 +1,14 @@
 ---
 id: "0023"
-status: accepted
+status: superseded
+superseded_by: "0024"
 date: 2026-11-09
 scope: cli
 ---
 
 # ADR 0023 — Application commands register behind the shared CLI runtime
+
+> Superseded by [ADR 0024](0024-application-composition-owns-selected-command-lifecycle.md).
 
 ## Decision
 
