@@ -425,6 +425,31 @@ func TestExecuteCleansUpAfterNonDemoCommandFailure(t *testing.T) {
 	}
 }
 
+func TestDependencyCleanupRunsInReverseRegistrationOrder(t *testing.T) {
+	setupConfigEnvironment(t)
+	var got []string
+	root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+		root.AddCommand(&cobra.Command{Use: "ordinary", Run: func(*cobra.Command, []string) {
+			runtime.RegisterCleanup(func(context.Context) error {
+				got = append(got, "first")
+				return nil
+			})
+			runtime.RegisterCleanup(func(context.Context) error {
+				got = append(got, "second")
+				return nil
+			})
+		}})
+	}}, testBuildInfo())
+	root.SetArgs([]string{"ordinary"})
+	root.SetErr(io.Discard)
+	if err := Execute(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "second,first" {
+		t.Fatalf("cleanup order = %v, want [second first]", got)
+	}
+}
+
 func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 	setupConfigEnvironment(t)
 	cleanupCalls := 0
