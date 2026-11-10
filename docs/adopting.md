@@ -37,13 +37,14 @@ A command with no setup declaration inherits the nearest ancestor's setup. A chi
 
 Add each child to its group and the group to the root after attaching its policy. A timeout selector closes over the checked application settings; the shared root never needs an application type or command name.
 
-Setup builds the group's service before its handler runs. Register cleanup as soon as it is available, including when setup fails after partial construction:
+Setup builds the group's service before its handler runs. Register cleanup as soon as it is available, including when setup fails after partial construction. Wrap construction errors with the operation name and retain their causes:
 
+<!-- cspell:ignore Errorf -->
 ```go
 service, cleanup, err := buildService(cmd.Context(), runtime.Configuration.Config, settings.Worker)
 runtime.RegisterCleanup(cleanup)
 if err != nil {
-  return err
+  return fmt.Errorf("build worker service: %w", err)
 }
 if service == nil {
   return errors.New("worker service factory returned no service")
