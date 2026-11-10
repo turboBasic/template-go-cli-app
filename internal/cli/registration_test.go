@@ -74,12 +74,12 @@ func TestPrepareApplicationRejectsTypeMismatch(t *testing.T) {
 	calls := 0
 	registration := CommandRegistration{
 		Settings: config.ApplicationSettings{Defaults: DemoConfig{}},
-		PrepareApplication: func(value any) error {
+		PrepareApplication: func(value any) (any, error) {
 			calls++
 			if _, ok := value.(replacementSettings); !ok {
-				return want
+				return nil, want
 			}
-			return nil
+			return value, nil
 		},
 		RegisterCommands: func(root *cobra.Command, _ *CommandRuntime) {
 			root.AddCommand(&cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}})
@@ -93,6 +93,39 @@ func TestPrepareApplicationRejectsTypeMismatch(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("application conversion calls = %d, want one", calls)
+	}
+}
+
+func TestPreparedApplicationValueFlowsToRuntimeAndTimeout(t *testing.T) {
+	setupConfigEnvironment(t)
+	checked := replacementSettings{Label: "checked"}
+	seenByTimeout := false
+	seenByHandler := false
+	registration := CommandRegistration{
+		Settings: config.ApplicationSettings{Defaults: replacementSettings{Label: "loaded"}},
+		PrepareApplication: func(value any) (any, error) {
+			if _, ok := value.(replacementSettings); !ok {
+				return nil, fmt.Errorf("unexpected settings type %T", value)
+			}
+			return checked, nil
+		},
+		OperationTimeout: func(_ *cobra.Command, value any) *time.Duration {
+			seenByTimeout = value == checked
+			return nil
+		},
+		RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+			root.AddCommand(&cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {
+				seenByHandler = runtime.Configuration.Application == checked
+			}})
+		},
+	}
+	root := NewRootCommand(registration, BuildInfo{})
+	root.SetArgs([]string{"run"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !seenByTimeout || !seenByHandler {
+		t.Fatalf("prepared value observed by timeout/handler = %t/%t, want true/true", seenByTimeout, seenByHandler)
 	}
 }
 

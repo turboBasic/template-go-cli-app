@@ -24,8 +24,8 @@ type CommandRegistration struct {
 	RegisterCommands func(*cobra.Command, *CommandRuntime)
 	FlagValues       func(*cobra.Command) map[string]config.FlagValue
 	OperationTimeout func(*cobra.Command, any) *time.Duration
-	// PrepareApplication checks the loaded application value and exposes it to typed closures.
-	PrepareApplication func(any) error
+	// PrepareApplication checks the loaded application value and returns the value closures use.
+	PrepareApplication func(any) (any, error)
 }
 
 // SetupPolicy declares whether a command supplies a setup policy. A zero value inherits its parent.
@@ -201,9 +201,11 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 			return app.Classify(app.ErrValidation, err)
 		}
 		if registration.PrepareApplication != nil {
-			if err := registration.PrepareApplication(loaded.Application); err != nil {
+			application, err := registration.PrepareApplication(loaded.Application)
+			if err != nil {
 				return fmt.Errorf("prepare application settings: %w", err)
 			}
+			loaded.Application = application
 		}
 		runtime.Configuration = loaded
 		policy := runtime.selectedPolicy(cmd)
