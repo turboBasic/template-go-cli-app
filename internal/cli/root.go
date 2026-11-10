@@ -124,6 +124,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	var cancelOperation context.CancelFunc
 	var stopProgress func()
 	var cleanupDependencies []func(context.Context) error
+	var executionStarted bool
 	cleanupTimeout := config.Defaults().Timeouts.Cleanup
 	var cleanupComplete bool
 	cleanup := func(parentContext context.Context) error {
@@ -162,6 +163,10 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		return errors.Join(dependencyErr, loggerErr)
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if executionStarted {
+			return errors.New("command tree already executed; create a new root command")
+		}
+		executionStarted = true
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}

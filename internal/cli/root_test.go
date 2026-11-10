@@ -444,6 +444,29 @@ func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 	}
 }
 
+func TestRootCommandRejectsRepeatedExecution(t *testing.T) {
+	setupConfigEnvironment(t)
+	cleanupCalls := 0
+	root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+		root.AddCommand(&cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {
+			runtime.RegisterCleanup(func(context.Context) error { cleanupCalls++; return nil })
+		}})
+	}}, testBuildInfo())
+	root.SetArgs([]string{"run"})
+	if err := Execute(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+
+	root.SetArgs([]string{"run"})
+	err := Execute(context.Background(), root)
+	if err == nil || !strings.Contains(err.Error(), "command tree already executed") {
+		t.Fatalf("second Execute() error = %v, want single-use error", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls after repeated execution = %d, want one", cleanupCalls)
+	}
+}
+
 func TestGlobalTimeoutAppliesWithoutConfiguredOperationTimeout(t *testing.T) {
 	setupConfigEnvironment(t)
 	reader := memory.NewResourceReader()
