@@ -329,6 +329,12 @@ func setApplicationGroupHelp(root *cobra.Command) error {
 		}
 	}
 	for _, command := range root.Commands() {
+		for _, name := range append([]string{command.Name()}, command.Aliases...) {
+			switch name {
+			case "help", "completion", "config", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
+				groupErr = errors.Join(groupErr, fmt.Errorf("root command name %q is reserved", name))
+			}
+		}
 		visit(command)
 	}
 	return groupErr
@@ -369,10 +375,17 @@ func validationArgs(inner cobra.PositionalArgs) cobra.PositionalArgs {
 }
 
 func isHelpOrCompletion(cmd *cobra.Command) bool {
-	for current := cmd; current != nil; current = current.Parent() {
-		if current.Name() == "help" || current.Name() == "completion" || strings.HasPrefix(current.Name(), "__complete") {
-			return true
-		}
+	root := cmd.Root()
+	for cmd.Parent() != nil && cmd.Parent() != root {
+		cmd = cmd.Parent()
 	}
-	return false
+	if cmd.Parent() != root {
+		return false
+	}
+	switch cmd.Name() {
+	case "help", "completion", cobra.ShellCompRequestCmd:
+		return true
+	default:
+		return false
+	}
 }

@@ -4,6 +4,8 @@ The template's `demo` group is an example application, not a dependency of the s
 
 Each standalone execution creates a fresh `CommandRegistration` and a fresh root, executes one command, then exits. A command with children is a help-only group: do not give it an application `Run` or `RunE`; put operations on leaf commands such as `servers list`. Application commands must not define `PersistentPreRun` or `PersistentPreRunE`; use setup policies so the shared lifecycle runs. The shared root installs the group's help and unknown-subcommand behavior after registration. See [ADR-0024](decisions/0024-application-composition-owns-selected-command-lifecycle.md).
 
+The root-level command names and aliases `help`, `completion`, `config`, `__complete`, and `__completeNoDesc` are reserved for the CLI. Nested application commands may use these names and receive the normal configuration and setup lifecycle.
+
 ## Register your application
 
 Give one `CommandRegistration` the application's combined settings schema, with one struct containing every group's settings. The loader validates the shared and application settings together, preserving precedence, provenance, and strict unknown-key checks. In this example, `applicationSchema` is the matching `config.ApplicationSettings`. `PrepareApplication` checks the loaded application value once and returns the value that the runtime and application closures use:
