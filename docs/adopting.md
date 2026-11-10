@@ -2,35 +2,48 @@
 
 The template's `demo` group is an example application, not a dependency of the shared CLI root. Replace its registration with your own command group and typed settings while keeping shared help, completion, configuration, logging, output, progress, timeout, cancellation, and cleanup behavior.
 
+Each standalone execution creates a fresh `CommandRegistration` and a fresh root, executes one command, then exits. A command with children is a help-only group: do not give it an application `Run` or `RunE`; put operations on leaf commands such as `servers list`. The shared root installs the group's help and unknown-subcommand behavior after registration. See [ADR-0024](decisions/0024-application-composition-owns-selected-command-lifecycle.md).
+
 ## Register your application
 
 Give one `CommandRegistration` the application's combined settings schema, with one struct containing every group's settings. The loader validates the shared and application settings together, preserving precedence, provenance, and strict unknown-key checks. In this example, `applicationSchema` is the matching `config.ApplicationSettings`. `PrepareApplication` checks the loaded application value once and returns the value that the runtime and application closures use:
 
 ```go
-var settings applicationSettings
-
-registration := cli.CommandRegistration{
-  Settings: applicationSchema,
-  PrepareApplication: func(value any) (any, error) {
-    loaded, ok := value.(applicationSettings)
-    if !ok {
-      return nil, errors.New("expected application settings")
-    }
-    settings = loaded
-    return loaded, nil
-  },
+func newRegistration() cli.CommandRegistration {
+  var settings applicationSettings
+  return cli.CommandRegistration{
+    Settings: applicationSchema,
+    PrepareApplication: func(value any) (any, error) {
+      loaded, ok := value.(applicationSettings)
+      if !ok {
+        return nil, errors.New("expected application settings")
+      }
+      settings = loaded
+      return loaded, nil
+    },
+  }
 }
 ```
 
-In `RegisterCommands`, add a static Cobra tree and associate setup and timeout policies with the command objects as you create them. A group can declare its default setup and typed timeout selector:
+In `RegisterCommands`, add a static Cobra tree and associate setup and timeout policies with the command objects as you create them. Give the group a leaf operation; leave the group itself without a `Run` or `RunE` handler:
 
 ```go
+groupCommand := &cobra.Command{Use: "servers"}
+listCommand := &cobra.Command{
+  Use: "list",
+  RunE: func(cmd *cobra.Command, _ []string) error {
+    return group.list(cmd.Context())
+  },
+}
+groupCommand.AddCommand(listCommand)
+
 runtime.SetCommandPolicy(groupCommand, cli.CommandPolicy{
   Setup: cli.SetupPolicy{Declared: true, Run: group.setup},
   Timeout: func(*cobra.Command) *time.Duration {
     return settings.Worker.Timeout
   },
 })
+root.AddCommand(groupCommand)
 ```
 
 A command with no setup declaration inherits the nearest ancestor's setup. A child can replace it with its own `SetupPolicy{Declared: true, Run: child.setup}`; `SetupPolicy{Declared: true}` explicitly skips inherited setup. The root runs only the nearest selected setup. `--timeout` overrides the selected command's configured timeout.
@@ -55,9 +68,10 @@ return nil
 
 The operation deadline covers setup and the handler. The root stops progress, cancels the operation, runs cleanup once in reverse registration order under a fresh context bounded by `timeouts.cleanup`, closes logging, and joins cleanup errors with the operation error. Help and completion skip configuration loading; `config show` loads and validates configuration without setting up dependencies or resolving secrets. Resolve secret values only inside the operation that needs them.
 
-Build a new root for every execution:
+Build a new registration and root for every standalone execution:
 
 ```go
+registration := newRegistration()
 root := cli.NewRootCommand(registration, buildInfo())
 return cli.Execute(ctx, root)
 ```

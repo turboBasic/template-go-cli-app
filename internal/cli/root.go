@@ -89,7 +89,9 @@ type BuildInfo struct {
 	BuildDate string
 }
 
-// NewRootCommand builds a static command tree and installs the shared runtime lifecycle.
+// NewRootCommand builds one standalone execution's static command tree and shared runtime lifecycle.
+// Create a fresh registration and root for each execution. Application groups with children are
+// help-only; put application operations on leaf commands.
 func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "cli-app",

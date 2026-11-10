@@ -9,7 +9,7 @@ scope: cli
 
 ## Decision
 
-Application composition provides one typed application configuration and binds group setup and timeout policies to the static Cobra command objects. The root resolves the nearest declared policy for the selected command, starts its operation deadline before setup, and runs registered cleanup once in reverse order under a fresh bounded context. Each root tree serves one normal execution; help and completion skip configuration loading, while configuration inspection loads and validates settings without setting up dependencies or resolving secrets.
+Application composition provides one typed application configuration and binds group setup and timeout policies to the static Cobra command objects. The root resolves the nearest declared policy for the selected command, starts its operation deadline before setup, and runs registered cleanup once in reverse order under a fresh bounded context. Each standalone execution creates a fresh registration and root; application command groups with children are help-only, and operations run on leaf commands. Help and completion skip configuration loading, while configuration inspection loads and validates settings without setting up dependencies or resolving secrets.
 
 ## Context
 
@@ -37,6 +37,7 @@ The two-group fixture requested by [Issue #113](https://github.com/turboBasic/te
 - An absent setup declaration inherits from the nearest ancestor; a declared setup with no function explicitly skips setup. A nearer command policy overrides its group's default.
 - `--timeout` overrides the configured selector. Setup and handler share its deadline; cleanup uses the configured cleanup bound and cleanup errors remain joined with operation errors.
 - Build a new root tree for each execution. Register cleanup as soon as it is available, including when setup fails. Resolve secret values only for the operation that needs them.
+- Build a fresh application registration and root for each standalone execution. Groups with children provide help only; the CLI installs their shared help and unknown-subcommand behavior, and application authors put operations on leaves.
 - Help and completion do not load application configuration. `config show` loads and validates it but does not initialize services or resolve secrets. Existing keys, precedence, provenance, and ADR-0022 demo names remain in force.
 - Reopen if a supported multi-execution or alternate composition contract needs to reuse a command tree.
 
