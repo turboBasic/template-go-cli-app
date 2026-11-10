@@ -236,6 +236,8 @@ func TestMultipleCommandGroupsValidateWholeConfigAndSkipInspectionSetup(t *testi
 	}{
 		{name: "help", args: []string{"--config", filepath.Join(t.TempDir(), "missing.toml"), "--help"}},
 		{name: "completion", args: []string{"--config", filepath.Join(t.TempDir(), "missing.toml"), "completion", "bash"}},
+		{name: "completion request", args: []string{"--config", filepath.Join(t.TempDir(), "missing.toml"), "__complete", "first", ""}},
+		{name: "completion request without descriptions", args: []string{"--config", filepath.Join(t.TempDir(), "missing.toml"), "__completeNoDesc", "first", ""}},
 		{name: "config inspection", args: []string{"--config", valid, "config", "show"}},
 		{name: "invalid config inspection", args: []string{"--config", invalid, "config", "show"}},
 	} {
@@ -253,5 +255,63 @@ func TestMultipleCommandGroupsValidateWholeConfigAndSkipInspectionSetup(t *testi
 				t.Fatalf("setup/secret resolution = %v/%d, want zero", state.setupCalls, state.secretResolutions)
 			}
 		})
+	}
+}
+
+func TestNestedHelpAndCompletionNamesRunApplicationLifecycle(t *testing.T) {
+	setupConfigEnvironment(t)
+	for _, name := range []string{"help", "completion", "__complete", "__completeNoDesc", "__complete-extra"} {
+		t.Run(name, func(t *testing.T) {
+			state := newCompositionState()
+			registration := compositionRegistration(state)
+			register := registration.RegisterCommands
+			registration.RegisterCommands = func(root *cobra.Command, runtime *CommandRuntime) {
+				register(root, runtime)
+				group, _, err := root.Find([]string{"first"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				group.AddCommand(&cobra.Command{Use: name, RunE: func(cmd *cobra.Command, _ []string) error {
+					if _, ok := cmd.Context().Deadline(); !ok {
+						return errors.New("missing operation deadline")
+					}
+					if state.services["first"] != "first-default" {
+						return errors.New("missing prepared group service")
+					}
+					return nil
+				}})
+			}
+			root := NewRootCommand(registration, BuildInfo{})
+			root.SetArgs([]string{"first", name})
+			if err := Execute(context.Background(), root); err != nil {
+				t.Fatal(err)
+			}
+			if state.setupCalls["first"] != 1 || state.cleanupCalls["first"] != 1 {
+				t.Fatalf("setup/cleanup = %d/%d, want 1/1", state.setupCalls["first"], state.cleanupCalls["first"])
+			}
+		})
+	}
+}
+
+func TestRootInfrastructureNamesAreReserved(t *testing.T) {
+	setupConfigEnvironment(t)
+	for _, name := range []string{"help", "completion", "config", "__complete", "__completeNoDesc"} {
+		for _, alias := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/alias=%t", name, alias), func(t *testing.T) {
+				registration := CommandRegistration{RegisterCommands: func(root *cobra.Command, _ *CommandRuntime) {
+					command := &cobra.Command{Use: name, Run: func(*cobra.Command, []string) {}}
+					if alias {
+						command.Use = "application"
+						command.Aliases = []string{name}
+					}
+					root.AddCommand(command, &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}})
+				}}
+				root := NewRootCommand(registration, BuildInfo{})
+				root.SetArgs([]string{"run"})
+				if err := Execute(context.Background(), root); err == nil || !strings.Contains(err.Error(), "is reserved") {
+					t.Fatalf("Execute() error = %v, want reserved root name error", err)
+				}
+			})
+		}
 	}
 }
