@@ -152,32 +152,34 @@ func TestApplicationGroupLifecycleThroughExecute(t *testing.T) {
 		Label string `koanf:"label"`
 	}
 	configReads, setupCalls, operationCalls := 0, 0, 0
-	registration := CommandRegistration{
-		Settings: config.ApplicationSettings{Defaults: settings{Label: "loaded"}},
-		FlagValues: func(*cobra.Command) map[string]config.FlagValue {
-			configReads++
-			return nil
-		},
-		RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
-			group := &cobra.Command{Use: "servers"}
-			runtime.SetCommandPolicy(group, CommandPolicy{Setup: SetupPolicy{Declared: true, Run: func(*cobra.Command, *CommandRuntime) error {
-				setupCalls++
+	newRegistration := func() CommandRegistration {
+		return CommandRegistration{
+			Settings: config.ApplicationSettings{Defaults: settings{Label: "loaded"}},
+			FlagValues: func(*cobra.Command) map[string]config.FlagValue {
+				configReads++
 				return nil
-			}}})
-			group.AddCommand(&cobra.Command{Use: "list", RunE: func(*cobra.Command, []string) error {
-				if got := runtime.Configuration.Application.(settings).Label; got != "loaded" {
-					return fmt.Errorf("application label = %q, want loaded", got)
-				}
-				operationCalls++
-				return nil
-			}})
-			root.AddCommand(group)
-		},
+			},
+			RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+				group := &cobra.Command{Use: "servers"}
+				runtime.SetCommandPolicy(group, CommandPolicy{Setup: SetupPolicy{Declared: true, Run: func(*cobra.Command, *CommandRuntime) error {
+					setupCalls++
+					return nil
+				}}})
+				group.AddCommand(&cobra.Command{Use: "list", RunE: func(*cobra.Command, []string) error {
+					if got := runtime.Configuration.Application.(settings).Label; got != "loaded" {
+						return fmt.Errorf("application label = %q, want loaded", got)
+					}
+					operationCalls++
+					return nil
+				}})
+				root.AddCommand(group)
+			},
+		}
 	}
 	missing := filepath.Join(t.TempDir(), "missing.toml")
 	for _, args := range [][]string{{"--config", missing, "servers"}, {"--config", missing, "servers", "--help"}} {
 		var out bytes.Buffer
-		root := NewRootCommand(registration, BuildInfo{})
+		root := NewRootCommand(newRegistration(), BuildInfo{})
 		root.SetArgs(args)
 		root.SetOut(&out)
 		root.SetErr(&bytes.Buffer{})
@@ -185,20 +187,20 @@ func TestApplicationGroupLifecycleThroughExecute(t *testing.T) {
 			t.Fatalf("Execute(%v) = %v, output %d bytes, config reads/setup %d/%d; want help without loading config or setup", args, err, out.Len(), configReads, setupCalls)
 		}
 	}
-	root := NewRootCommand(registration, BuildInfo{})
+	root := NewRootCommand(newRegistration(), BuildInfo{})
 	root.SetArgs([]string{"servers", "lst"})
 	root.SetErr(&bytes.Buffer{})
 	if err := Execute(context.Background(), root); !errors.Is(err, app.ErrValidation) || !strings.Contains(err.Error(), `unknown command "lst"`) || configReads != 0 || setupCalls != 0 {
 		t.Fatalf("Execute(servers lst) = %v, config reads/setup %d/%d; want validation error and no configuration access or setup", err, configReads, setupCalls)
 	}
-	root = NewRootCommand(registration, BuildInfo{})
+	root = NewRootCommand(newRegistration(), BuildInfo{})
 	root.SetArgs([]string{"servers", "list"})
 	root.SetErr(&bytes.Buffer{})
 	if err := Execute(context.Background(), root); err != nil || configReads != 1 || setupCalls != 1 || operationCalls != 1 {
 		t.Fatalf("Execute(servers list) = %v, config reads/setup/operation %d/%d/%d; want 1/1/1", err, configReads, setupCalls, operationCalls)
 	}
 	for _, args := range [][]string{{"config", "show"}, {"--help"}, {"completion", "bash"}} {
-		root = NewRootCommand(registration, BuildInfo{})
+		root = NewRootCommand(newRegistration(), BuildInfo{})
 		root.SetArgs(args)
 		root.SetOut(&bytes.Buffer{})
 		root.SetErr(&bytes.Buffer{})
