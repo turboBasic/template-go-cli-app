@@ -206,6 +206,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 			}
 		}
 		runtime.Configuration = loaded
+		policy := runtime.selectedPolicy(cmd)
 		cleanupTimeout = loaded.Config.Timeouts.Cleanup
 		noColor := os.Getenv("NO_COLOR") != ""
 		runtime.Renderer = output.Renderer{
@@ -223,7 +224,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 				return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeoutOverride))
 			}
 			configuredTimeout = &timeoutOverride
-		} else if policy := runtime.selectedPolicy(cmd); policy.Timeout != nil {
+		} else if policy.Timeout != nil {
 			configuredTimeout = policy.Timeout(cmd)
 		} else if registration.OperationTimeout != nil {
 			configuredTimeout = registration.OperationTimeout(cmd, loaded.Application)
@@ -263,6 +264,11 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		}
 		runtime.Logger = logResult.Logger
 		runtime.Progress = progressReporter
+		if policy.Setup.Declared && policy.Setup.Run != nil {
+			if err := policy.Setup.Run(cmd, runtime); err != nil {
+				return fmt.Errorf("setup selected command: %w", err)
+			}
+		}
 		return nil
 	}
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {

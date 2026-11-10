@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,105 @@ type lifecycleState struct {
 	loaded            config.LoadResult
 	operationName     string
 	operationTimeout  time.Duration
+}
+
+type commandPolicyState struct {
+	setupErr, cleanupErr error
+	blockSetup           bool
+	setupCalls           int
+	handlerCalls         int
+	cleanupCalls         int
+	cleanupContextErr    error
+	setupDeadline        time.Duration
+}
+
+func commandPolicyRegistration(state *commandPolicyState) CommandRegistration {
+	return CommandRegistration{
+		RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+			command := &cobra.Command{Use: "run", RunE: func(*cobra.Command, []string) error {
+				state.handlerCalls++
+				return nil
+			}}
+			runtime.SetCommandPolicy(command, CommandPolicy{
+				Setup: SetupPolicy{Declared: true, Run: func(cmd *cobra.Command, runtime *CommandRuntime) error {
+					state.setupCalls++
+					if runtime.Logger == nil || runtime.Progress == nil {
+						return errors.New("shared runtime is not initialized")
+					}
+					if deadline, ok := cmd.Context().Deadline(); ok {
+						state.setupDeadline = time.Until(deadline)
+					}
+					runtime.RegisterCleanup(func(ctx context.Context) error {
+						state.cleanupCalls++
+						state.cleanupContextErr = ctx.Err()
+						return state.cleanupErr
+					})
+					if state.blockSetup {
+						<-cmd.Context().Done()
+						return cmd.Context().Err()
+					}
+					return state.setupErr
+				}},
+				Timeout: func(*cobra.Command) *time.Duration {
+					timeout := 2 * time.Second
+					return &timeout
+				},
+			})
+			root.AddCommand(command)
+		},
+	}
+}
+
+func TestCommandPolicySetupRunsInsideOperationLifecycle(t *testing.T) {
+	setupConfigEnvironment(t)
+	setupErr, cleanupErr := errors.New("partial setup failed"), errors.New("cleanup failed")
+	for _, test := range []struct {
+		name             string
+		args             []string
+		setupErr         error
+		cleanupErr       error
+		blockSetup       bool
+		wantSetupErr     error
+		wantCleanupErr   error
+		wantSetupCalls   int
+		wantCleanupCalls int
+		wantHandlerCalls int
+	}{
+		{name: "success", args: []string{"run"}, wantSetupCalls: 1, wantCleanupCalls: 1, wantHandlerCalls: 1},
+		{name: "partial setup failure", args: []string{"run"}, setupErr: setupErr, cleanupErr: cleanupErr, wantSetupErr: setupErr, wantCleanupErr: cleanupErr, wantSetupCalls: 1, wantCleanupCalls: 1},
+		{name: "setup deadline", args: []string{"--timeout", "30ms", "run"}, blockSetup: true, wantSetupErr: context.DeadlineExceeded, wantSetupCalls: 1, wantCleanupCalls: 1},
+		{name: "help", args: []string{"--help"}},
+		{name: "completion", args: []string{"completion", "bash"}},
+		{name: "config inspection", args: []string{"config", "show"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state := &commandPolicyState{
+				setupErr: test.setupErr, cleanupErr: test.cleanupErr, blockSetup: test.blockSetup,
+			}
+			root := NewRootCommand(commandPolicyRegistration(state), BuildInfo{})
+			root.SetArgs(test.args)
+			root.SetErr(io.Discard)
+			err := Execute(context.Background(), root)
+			if test.wantSetupErr != nil && !errors.Is(err, test.wantSetupErr) {
+				t.Errorf("Execute() error = %v, want setup error %v", err, test.wantSetupErr)
+			}
+			if test.wantCleanupErr != nil && !errors.Is(err, test.wantCleanupErr) {
+				t.Errorf("Execute() error = %v, want cleanup error %v", err, test.wantCleanupErr)
+			}
+			if test.wantSetupErr == nil && test.wantCleanupErr == nil && err != nil {
+				t.Fatalf("Execute() error = %v, want nil", err)
+			}
+			if state.setupCalls != test.wantSetupCalls || state.cleanupCalls != test.wantCleanupCalls || state.handlerCalls != test.wantHandlerCalls {
+				t.Fatalf("setup/cleanup/handler calls = %d/%d/%d, want %d/%d/%d", state.setupCalls, state.cleanupCalls, state.handlerCalls, test.wantSetupCalls, test.wantCleanupCalls, test.wantHandlerCalls)
+			}
+			if state.cleanupContextErr != nil {
+				t.Fatalf("cleanup context error = %v, want live bounded context", state.cleanupContextErr)
+			}
+			if test.blockSetup && (state.setupDeadline <= 0 || state.setupDeadline > time.Second) {
+				t.Fatalf("setup deadline remaining = %s, want explicit 30ms override", state.setupDeadline)
+			}
+		})
+	}
 }
 
 type lifecycleReplacementService struct{ state *lifecycleState }
