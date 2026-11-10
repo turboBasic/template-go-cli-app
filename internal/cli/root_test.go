@@ -72,6 +72,56 @@ func TestApplicationGroupsRejectOperationHandlers(t *testing.T) {
 	}
 }
 
+func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
+	for _, execute := range []struct {
+		name string
+		run  func(*cobra.Command) error
+	}{
+		{name: "Cobra", run: func(root *cobra.Command) error { return root.Execute() }},
+		{name: "cli Execute", run: func(root *cobra.Command) error { return Execute(context.Background(), root) }},
+	} {
+		for _, test := range []struct {
+			name string
+			set  func(*cobra.Command, func())
+		}{
+			{name: "PersistentPreRun", set: func(command *cobra.Command, called func()) {
+				command.PersistentPreRun = func(*cobra.Command, []string) { called() }
+			}},
+			{name: "PersistentPreRunE", set: func(command *cobra.Command, called func()) {
+				command.PersistentPreRunE = func(*cobra.Command, []string) error { called(); return nil }
+			}},
+		} {
+			for _, target := range []string{"group", "leaf"} {
+				t.Run(execute.name+"/"+test.name+"/"+target, func(t *testing.T) {
+					hookCalls, setupCalls, handlerCalls := 0, 0, 0
+					root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+						group := &cobra.Command{Use: "group"}
+						leaf := &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) { handlerCalls++ }}
+						runtime.SetCommandPolicy(group, CommandPolicy{Setup: SetupPolicy{Declared: true, Run: func(*cobra.Command, *CommandRuntime) error {
+							setupCalls++
+							return nil
+						}}})
+						if target == "group" {
+							test.set(group, func() { hookCalls++ })
+						} else {
+							test.set(leaf, func() { hookCalls++ })
+						}
+						group.AddCommand(leaf)
+						root.AddCommand(group)
+					}}, BuildInfo{})
+					root.SetArgs([]string{"group", "run"})
+					if err := execute.run(root); err == nil || !strings.Contains(err.Error(), "persistent pre-run") || !strings.Contains(err.Error(), "group") {
+						t.Fatalf("Execute() error = %v, want actionable hook error", err)
+					}
+					if hookCalls != 0 || setupCalls != 0 || handlerCalls != 0 {
+						t.Fatalf("hook/setup/handler calls = %d/%d/%d, want zero", hookCalls, setupCalls, handlerCalls)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestResourceListCommand(t *testing.T) {
 	command := newTestRootCommand(t)
 	command.SetArgs([]string{"demo", "structured-output"})

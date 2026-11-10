@@ -2,7 +2,7 @@
 
 The template's `demo` group is an example application, not a dependency of the shared CLI root. Replace its registration with your own command group and typed settings while keeping shared help, completion, configuration, logging, output, progress, timeout, cancellation, and cleanup behavior.
 
-Each standalone execution creates a fresh `CommandRegistration` and a fresh root, executes one command, then exits. A command with children is a help-only group: do not give it an application `Run` or `RunE`; put operations on leaf commands such as `servers list`. The shared root installs the group's help and unknown-subcommand behavior after registration. See [ADR-0024](decisions/0024-application-composition-owns-selected-command-lifecycle.md).
+Each standalone execution creates a fresh `CommandRegistration` and a fresh root, executes one command, then exits. A command with children is a help-only group: do not give it an application `Run` or `RunE`; put operations on leaf commands such as `servers list`. Application commands must not define `PersistentPreRun` or `PersistentPreRunE`; use setup policies so the shared lifecycle runs. The shared root installs the group's help and unknown-subcommand behavior after registration. See [ADR-0024](decisions/0024-application-composition-owns-selected-command-lifecycle.md).
 
 ## Register your application
 
