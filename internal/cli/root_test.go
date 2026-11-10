@@ -30,6 +30,48 @@ func newTestDemoRoot(factory DemoFactory, build BuildInfo, names []string) *cobr
 	return NewRootCommand(NewDemoRegistration(factory, names), build)
 }
 
+func TestApplicationGroupsRejectOperationHandlers(t *testing.T) {
+	for _, execute := range []struct {
+		name string
+		run  func(*cobra.Command) error
+	}{
+		{name: "Cobra", run: func(root *cobra.Command) error { return root.Execute() }},
+		{name: "cli Execute", run: func(root *cobra.Command) error { return Execute(context.Background(), root) }},
+	} {
+		for _, test := range []struct {
+			name string
+			set  func(*cobra.Command, func())
+		}{
+			{name: "Run", set: func(command *cobra.Command, called func()) {
+				command.Run = func(*cobra.Command, []string) { called() }
+			}},
+			{name: "RunE", set: func(command *cobra.Command, called func()) {
+				command.RunE = func(*cobra.Command, []string) error { called(); return nil }
+			}},
+		} {
+			t.Run(execute.name+"/"+test.name, func(t *testing.T) {
+				handlerCalls := 0
+				root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, _ *CommandRuntime) {
+					group := &cobra.Command{Use: "parent"}
+					childGroup := &cobra.Command{Use: "child"}
+					leaf := &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}}
+					childGroup.AddCommand(leaf)
+					test.set(childGroup, func() { handlerCalls++ })
+					group.AddCommand(childGroup)
+					root.AddCommand(group)
+				}}, BuildInfo{})
+				root.SetArgs([]string{"parent", "child"})
+				if err := execute.run(root); err == nil || !strings.Contains(err.Error(), `parent child`) || !strings.Contains(err.Error(), test.name) {
+					t.Fatalf("Execute() error = %v, want group and %s in error", err, test.name)
+				}
+				if handlerCalls != 0 {
+					t.Fatalf("group handler calls = %d, want zero", handlerCalls)
+				}
+			})
+		}
+	}
+}
+
 func TestResourceListCommand(t *testing.T) {
 	command := newTestRootCommand(t)
 	command.SetArgs([]string{"demo", "structured-output"})

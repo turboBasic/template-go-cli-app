@@ -39,3 +39,4 @@ Go CLI App Template is GitHub template repository.
 
 - Run `just lint` after code or configuration changes, `just test` for behavior changes, and `just build`
   for build or toolchain changes.
+- Application command groups with children are help-only; register operations on leaves and create a fresh registration and root per standalone execution. See [ADR-0024](decisions/0024-application-composition-owns-selected-command-lifecycle.md).

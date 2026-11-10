@@ -89,7 +89,9 @@ type BuildInfo struct {
 	BuildDate string
 }
 
-// NewRootCommand builds a static command tree and installs the shared runtime lifecycle.
+// NewRootCommand builds one standalone execution's static command tree and shared runtime lifecycle.
+// Create a fresh registration and root for each execution. Application groups with children are
+// help-only; put application operations on leaf commands.
 func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "cli-app",
@@ -120,6 +122,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	flags.BoolVar(&quiet, "quiet", false, "suppress non-essential output")
 	flags.DurationVar(&timeoutOverride, "timeout", 0, "override the timeout for the selected operation")
 	runtime := &CommandRuntime{}
+	var groupErr error
 	var logResult logging.Result
 	var cancelOperation context.CancelFunc
 	var stopProgress func()
@@ -163,6 +166,9 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		return errors.Join(dependencyErr, loggerErr)
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if groupErr != nil {
+			return groupErr
+		}
 		if executionStarted {
 			return errors.New("command tree already executed; create a new root command")
 		}
@@ -275,6 +281,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	if registration.RegisterCommands != nil {
 		registration.RegisterCommands(root, runtime)
 	}
+	groupErr = setApplicationGroupHelp(root)
 	root.AddCommand(
 		newConfigCommand(
 			func() []config.Entry { return runtime.Configuration.Entries() },
@@ -291,6 +298,32 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		return nil
 	}
 	return root
+}
+
+func setApplicationGroupHelp(root *cobra.Command) error {
+	var groupErr error
+	var visit func(*cobra.Command)
+	visit = func(command *cobra.Command) {
+		children := command.Commands()
+		if len(children) > 0 {
+			if command.Run != nil || command.RunE != nil {
+				handler := "Run"
+				if command.RunE != nil {
+					handler = "RunE"
+				}
+				groupErr = errors.Join(groupErr, fmt.Errorf("command group %q must not define %s; groups only show help", command.CommandPath(), handler))
+			} else {
+				rejectUnknownSubcommands(command)
+			}
+		}
+		for _, child := range children {
+			visit(child)
+		}
+	}
+	for _, command := range root.Commands() {
+		visit(command)
+	}
+	return groupErr
 }
 
 // rejectUnknownSubcommands makes a command that only groups subcommands runnable. Cobra skips Args

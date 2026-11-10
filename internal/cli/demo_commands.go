@@ -100,7 +100,6 @@ func newDemoCommand(group *demoResourceGroup, names []string) *cobra.Command {
 		Long: "Demonstrations of the template's contracts, kept so a developer can see each one working and copy it.\n" +
 			"They are not part of an application built from the template: delete this group, and the code it calls.",
 	}
-	rejectUnknownSubcommands(demo)
 	demo.AddCommand(
 		newDemoStructuredOutputCommand(group),
 		newDemoNotFoundCommand(group, names),
