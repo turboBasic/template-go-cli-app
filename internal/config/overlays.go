@@ -21,11 +21,20 @@ func Load(files ConfigFiles, flags map[string]FlagValue) (LoadResult, error) {
 }
 
 // LoadWithSettings applies the same sources to shared settings and one registered application schema.
-func LoadWithSettings(files ConfigFiles, flags map[string]FlagValue, application ApplicationSettings) (LoadResult, error) {
+func LoadWithSettings(
+	files ConfigFiles,
+	flags map[string]FlagValue,
+	application ApplicationSettings,
+) (LoadResult, error) {
 	return load(files, os.Environ(), flags, application)
 }
 
-func load(files ConfigFiles, environment []string, flags map[string]FlagValue, application ApplicationSettings) (LoadResult, error) {
+func load(
+	files ConfigFiles,
+	environment []string,
+	flags map[string]FlagValue,
+	application ApplicationSettings,
+) (LoadResult, error) {
 	workingDir, err := os.Getwd()
 	if err != nil {
 		return LoadResult{}, fmt.Errorf("find working directory: %w", err)
@@ -33,7 +42,13 @@ func load(files ConfigFiles, environment []string, flags map[string]FlagValue, a
 	return loadAt(files, environment, flags, workingDir, application)
 }
 
-func loadAt(files ConfigFiles, environment []string, flags map[string]FlagValue, workingDir string, application ApplicationSettings) (LoadResult, error) {
+func loadAt(
+	files ConfigFiles,
+	environment []string,
+	flags map[string]FlagValue,
+	workingDir string,
+	application ApplicationSettings,
+) (LoadResult, error) {
 	settings := []any{Defaults()}
 	if application.Defaults != nil {
 		settings = append(settings, application.Defaults)

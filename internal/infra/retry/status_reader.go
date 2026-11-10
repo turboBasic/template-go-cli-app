@@ -70,7 +70,13 @@ func WithProgress(reporter app.ProgressReporter) Option {
 }
 
 // NewStatusReader wraps a status reader with retries under policy.
-func NewStatusReader(reader app.StatusReader, policy Policy, clock Clock, random Random, options ...Option) (*StatusReader, error) {
+func NewStatusReader(
+	reader app.StatusReader,
+	policy Policy,
+	clock Clock,
+	random Random,
+	options ...Option,
+) (*StatusReader, error) {
 	if reader == nil {
 		return nil, errors.New("status reader is required")
 	}

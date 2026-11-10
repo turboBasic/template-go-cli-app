@@ -27,7 +27,12 @@ func newDemoStructuredOutputCommand(group *demoResourceGroup) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return group.runtime.Renderer.RenderResult(demoResourceResultsFor(items), func(w io.Writer, options output.Options) error { return renderDemoResources(w, options, items) })
+			return group.runtime.Renderer.RenderResult(
+				demoResourceResultsFor(items),
+				func(w io.Writer, options output.Options) error {
+					return renderDemoResources(w, options, items)
+				},
+			)
 		},
 	}
 }
@@ -49,7 +54,12 @@ func newDemoNotFoundCommand(group *demoResourceGroup, names []string) *cobra.Com
 			if err != nil {
 				return err
 			}
-			return group.runtime.Renderer.RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error { return renderDemoResource(w, options, resource) })
+			return group.runtime.Renderer.RenderResult(
+				demoResourceResultFor(resource),
+				func(w io.Writer, options output.Options) error {
+					return renderDemoResource(w, options, resource)
+				},
+			)
 		},
 	}
 }
@@ -72,7 +82,12 @@ func newDemoSecretCredentialCommand(group *demoResourceGroup, names []string) *c
 			if err != nil {
 				return err
 			}
-			return group.runtime.Renderer.RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error { return renderDemoResource(w, options, resource) })
+			return group.runtime.Renderer.RenderResult(
+				demoResourceResultFor(resource),
+				func(w io.Writer, options output.Options) error {
+					return renderDemoResource(w, options, resource)
+				},
+			)
 		},
 	}
 }
@@ -85,7 +100,12 @@ func newDemoCommand(group *demoResourceGroup, names []string) *cobra.Command {
 			"They are not part of an application built from the template: delete this group, and the code it calls.",
 	}
 	rejectUnknownSubcommands(demo)
-	demo.AddCommand(newDemoStructuredOutputCommand(group), newDemoNotFoundCommand(group, names), newDemoSecretCredentialCommand(group, names), newDemoFlakyDependencyCommand(group))
+	demo.AddCommand(
+		newDemoStructuredOutputCommand(group),
+		newDemoNotFoundCommand(group, names),
+		newDemoSecretCredentialCommand(group, names),
+		newDemoFlakyDependencyCommand(group),
+	)
 	demo.AddCommand(&cobra.Command{
 		Use:   "long-running",
 		Short: "Demonstrate the determinate progress bar with a counted operation of about 30 seconds",
@@ -109,12 +129,19 @@ func newDemoFlakyDependencyCommand(group *demoResourceGroup) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "flaky-dependency",
 		Short: "Demonstrate retries of a read-only dependency that fails transiently",
-		Long: fmt.Sprintf("Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
-			"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
-			"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+
-			"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay,jitter} or the matching\n"+
-			"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables. --max-attempts overrides max_attempts for one run, and %d or\n"+
-			"fewer shows the failure. --timeout bounds the retries.", app.FlakyFailures, defaultPolicy.MaxAttempts, defaultPolicy.InitialDelay, defaultPolicy.MaxDelay, app.FlakyFailures),
+		Long: fmt.Sprintf(
+			"Demonstrates the retry contract: the dependency this command reads fails %d times with an unavailable error, then\n"+
+				"succeeds. The default policy allows %d attempts, waits %s before the first retry and doubles the wait up to %s,\n"+
+				"so the spinner stays visible; each retry shows on stderr. Change the policy with\n"+
+				"retry.demo.flaky_dependency.{max_attempts,initial_delay,max_delay,jitter} or the matching\n"+
+				"CLI_APP_RETRY_DEMO_FLAKY_DEPENDENCY_* variables. --max-attempts overrides max_attempts for one run, and %d or\n"+
+				"fewer shows the failure. --timeout bounds the retries.",
+			app.FlakyFailures,
+			defaultPolicy.MaxAttempts,
+			defaultPolicy.InitialDelay,
+			defaultPolicy.MaxDelay,
+			app.FlakyFailures,
+		),
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resources, err := group.get(cmd.Context())
@@ -125,7 +152,12 @@ func newDemoFlakyDependencyCommand(group *demoResourceGroup) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return group.runtime.Renderer.RenderResult(demoResourceResultFor(resource), func(w io.Writer, options output.Options) error { return renderDemoResource(w, options, resource) })
+			return group.runtime.Renderer.RenderResult(
+				demoResourceResultFor(resource),
+				func(w io.Writer, options output.Options) error {
+					return renderDemoResource(w, options, resource)
+				},
+			)
 		},
 	}
 	command.Flags().Int("max-attempts", 0, "override retry.demo.flaky_dependency.max_attempts")
