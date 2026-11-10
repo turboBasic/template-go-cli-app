@@ -891,7 +891,7 @@ func TestConfigShowSkipsLoggingAndFactory(t *testing.T) {
 	}
 }
 
-func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
+func TestFreshTreesLoadIndependentConfigAndDependencies(t *testing.T) {
 	setupConfigEnvironment(t)
 	if err := os.Unsetenv("CLI_APP_LOG_LEVEL"); err != nil {
 		t.Fatal(err)
@@ -906,11 +906,11 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := newTestDemoRoot(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		configs = append(configs, effective)
-		return app.NewResourceService(reader, logger, progressReporter), nil, nil
-	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
+		command := newTestDemoRoot(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			configs = append(configs, effective)
+			return app.NewResourceService(reader, logger, progressReporter), nil, nil
+		}, testBuildInfo(), reader.Names())
 		command.SetArgs([]string{"--config", path, "demo", "structured-output"})
 		command.SetOut(&bytes.Buffer{})
 		if err := command.Execute(); err != nil {

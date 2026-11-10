@@ -42,13 +42,11 @@ type CommandPolicy struct {
 
 // CommandRuntime exposes shared facilities to commands after a selected command initializes them.
 type CommandRuntime struct {
-	Configuration config.LoadResult
-	Renderer      output.Renderer
-	Logger        *slog.Logger
-	Progress      app.ProgressReporter
-	policies      map[*cobra.Command]CommandPolicy
-	// RunID changes for each execution so lazy command dependencies can be reset after cleanup.
-	RunID           uint64
+	Configuration   config.LoadResult
+	Renderer        output.Renderer
+	Logger          *slog.Logger
+	Progress        app.ProgressReporter
+	policies        map[*cobra.Command]CommandPolicy
 	registerCleanup func(func(context.Context) error)
 }
 
@@ -164,16 +162,6 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		return errors.Join(dependencyErr, loggerErr)
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		if err := cleanup(cmd.Context()); err != nil {
-			return err
-		}
-		cleanupComplete = false
-		stopProgress = nil
-		runtime.Configuration = config.LoadResult{}
-		runtime.Renderer = output.Renderer{}
-		runtime.Logger = nil
-		runtime.Progress = nil
-		runtime.RunID++
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
