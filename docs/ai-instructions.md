@@ -20,6 +20,7 @@ Go CLI App Template is GitHub template repository.
 - Return actionable errors and wrap causes with `%w`; do not panic for operational failures.
 - Pass dependencies explicitly; do not add mutable package-level state.
 - Format with `gofmt` and `goimports`. Exported identifiers need useful doc comments.
+- For readability, manually wrap long function calls and declarations across lines; `gofmt` preserves these breaks.
 - Put tests beside the code and use table-driven cases where behaviour has multiple cases.
 - Keep one `go.mod` for this binary. Do not add dependencies for small standard-library tasks.
 

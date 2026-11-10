@@ -25,7 +25,13 @@ var (
 
 func main() {
 	resources := memory.NewResourceReader()
-	command := cli.NewRootCommand(cli.NewDemoRegistration(newDemoResourceFactory(resources), resources.Names()), buildInfo())
+	command := cli.NewRootCommand(
+		cli.NewDemoRegistration(
+			newDemoResourceFactory(resources),
+			resources.Names(),
+		),
+		buildInfo(),
+	)
 	command.SetErr(os.Stderr)
 	exitWithCode(executeWithSignals(func(ctx context.Context) error {
 		return cli.Execute(ctx, command)

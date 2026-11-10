@@ -68,7 +68,9 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return app.Classify(app.ErrValidation, err)
 	})
-	root.SetVersionTemplate("{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}")
+	root.SetVersionTemplate(
+		"{{printf \"%s version %s (commit %s, built %s)\\n\" .Name .Version (index .Annotations \"commit\") (index .Annotations \"buildDate\")}}",
+	)
 	var configPath, logLevel, outputFormat, color string
 	var timeoutOverride time.Duration
 	var quiet bool
@@ -219,11 +221,18 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
 		return cleanup(cmd.Context())
 	}
-	runtime.registerCleanup = func(cleanup func(context.Context) error) { cleanupDependencies = append(cleanupDependencies, cleanup) }
+	runtime.registerCleanup = func(cleanup func(context.Context) error) {
+		cleanupDependencies = append(cleanupDependencies, cleanup)
+	}
 	if registration.RegisterCommands != nil {
 		registration.RegisterCommands(root, runtime)
 	}
-	root.AddCommand(newConfigCommand(func() []config.Entry { return runtime.Configuration.Entries() }, func() output.Renderer { return runtime.Renderer }))
+	root.AddCommand(
+		newConfigCommand(
+			func() []config.Entry { return runtime.Configuration.Entries() },
+			func() output.Renderer { return runtime.Renderer },
+		),
+	)
 	// The root Args validator stops Cobra's Find from rejecting an unknown help topic itself.
 	root.InitDefaultHelpCmd()
 	help, _, _ := root.Find([]string{"help"})

@@ -14,7 +14,9 @@ import (
 )
 
 // DemoFactory creates the reference demo's service and its dependency cleanup.
-type DemoFactory func(context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error)
+type DemoFactory func(
+	context.Context, config.Config, DemoConfig, *slog.Logger, app.ProgressReporter,
+) (*app.ResourceService, func(context.Context) error, error)
 
 // NewDemoRegistration returns the template's example command group as an application registration.
 func NewDemoRegistration(factory DemoFactory, names []string) CommandRegistration {
@@ -51,7 +53,13 @@ func (g *demoResourceGroup) get(ctx context.Context) (*app.ResourceService, erro
 		if g.factory == nil {
 			g.err = errors.New("demo resource factory is required")
 		} else {
-			resources, cleanup, err := g.factory(ctx, g.runtime.Configuration.Config, g.runtime.Configuration.Application.(DemoConfig), g.runtime.Logger, g.runtime.Progress)
+			resources, cleanup, err := g.factory(
+				ctx,
+				g.runtime.Configuration.Config,
+				g.runtime.Configuration.Application.(DemoConfig),
+				g.runtime.Logger,
+				g.runtime.Progress,
+			)
 			g.runtime.RegisterCleanup(cleanup)
 			if err != nil {
 				g.err = fmt.Errorf("create application dependencies: %w", err)

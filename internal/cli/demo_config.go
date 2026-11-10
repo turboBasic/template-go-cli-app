@@ -54,12 +54,25 @@ type demoRetryPolicy struct {
 }
 
 func demoDefaults() DemoConfig {
-	return DemoConfig{Retry: demoRetrySettings{Demo: demoRetryConfig{FlakyDependency: demoRetryPolicy{MaxAttempts: 3, InitialDelay: 3 * time.Second, MaxDelay: 10 * time.Second}}}}
+	return DemoConfig{
+		Retry: demoRetrySettings{
+			Demo: demoRetryConfig{
+				FlakyDependency: demoRetryPolicy{
+					MaxAttempts:  3,
+					InitialDelay: 3 * time.Second,
+					MaxDelay:     10 * time.Second,
+				},
+			},
+		},
+	}
 }
 
 // DemoApplicationSettings registers the reference demo's defaults and validation.
 func DemoApplicationSettings() config.ApplicationSettings {
-	return config.ApplicationSettings{Defaults: demoDefaults(), Validate: func(value any) error { return validateDemoConfig(value.(DemoConfig)) }}
+	return config.ApplicationSettings{
+		Defaults: demoDefaults(),
+		Validate: func(value any) error { return validateDemoConfig(value.(DemoConfig)) },
+	}
 }
 
 func validateDemoConfig(c DemoConfig) error {
