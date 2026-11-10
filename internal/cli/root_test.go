@@ -91,7 +91,7 @@ func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
 				command.PersistentPreRunE = func(*cobra.Command, []string) error { called(); return nil }
 			}},
 		} {
-			for _, target := range []string{"group", "leaf"} {
+			for _, target := range []string{"root", "group", "leaf"} {
 				t.Run(execute.name+"/"+test.name+"/"+target, func(t *testing.T) {
 					hookCalls, setupCalls, handlerCalls := 0, 0, 0
 					root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
@@ -101,16 +101,23 @@ func TestApplicationCommandsRejectPersistentPreRunHooks(t *testing.T) {
 							setupCalls++
 							return nil
 						}}})
-						if target == "group" {
+						switch target {
+						case "root":
+							test.set(root, func() { hookCalls++ })
+						case "group":
 							test.set(group, func() { hookCalls++ })
-						} else {
+						default:
 							test.set(leaf, func() { hookCalls++ })
 						}
 						group.AddCommand(leaf)
 						root.AddCommand(group)
 					}}, BuildInfo{})
 					root.SetArgs([]string{"group", "run"})
-					if err := execute.run(root); err == nil || !strings.Contains(err.Error(), "persistent pre-run") || !strings.Contains(err.Error(), "group") {
+					wantCommand := "group"
+					if target == "root" {
+						wantCommand = "root"
+					}
+					if err := execute.run(root); err == nil || !strings.Contains(err.Error(), "persistent pre-run") || !strings.Contains(err.Error(), wantCommand) {
 						t.Fatalf("Execute() error = %v, want actionable hook error", err)
 					}
 					if hookCalls != 0 || setupCalls != 0 || handlerCalls != 0 {

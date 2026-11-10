@@ -166,7 +166,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		}
 		return errors.Join(dependencyErr, loggerErr)
 	}
-	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	preRun := func(cmd *cobra.Command, _ []string) error {
 		if groupErr != nil {
 			return groupErr
 		}
@@ -283,6 +283,11 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		registration.RegisterCommands(root, runtime)
 	}
 	groupErr = setApplicationGroupHelp(root)
+	if root.PersistentPreRun != nil || root.PersistentPreRunE != nil {
+		groupErr = errors.Join(groupErr, errors.New("root command must not define persistent pre-run hooks; use a setup policy"))
+	}
+	root.PersistentPreRun = nil
+	root.PersistentPreRunE = preRun
 	root.AddCommand(
 		newConfigCommand(
 			func() []config.Entry { return runtime.Configuration.Entries() },
