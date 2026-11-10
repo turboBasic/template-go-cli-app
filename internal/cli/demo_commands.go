@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/turboBasic/template-go-cli-app/internal/app"
@@ -11,7 +12,7 @@ import (
 )
 
 func newDemoStructuredOutputCommand(group *demoResourceGroup) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "structured-output",
 		Short: "Demonstrate text and JSON results written to stdout",
 		Long: "Demonstrates the result contract: the resource list is a human table by default and a JSON array with\n" +
@@ -19,11 +20,7 @@ func newDemoStructuredOutputCommand(group *demoResourceGroup) *cobra.Command {
 			"progress or diagnostics mixed in.",
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			resources, err := group.get(cmd.Context())
-			if err != nil {
-				return err
-			}
-			items, err := resources.List(cmd.Context())
+			items, err := group.resources.List(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -35,10 +32,14 @@ func newDemoStructuredOutputCommand(group *demoResourceGroup) *cobra.Command {
 			)
 		},
 	}
+	group.runtime.SetCommandPolicy(command, CommandPolicy{
+		Timeout: func(*cobra.Command) *time.Duration { return group.settings.Timeouts.Demo.StructuredOutput },
+	})
+	return command
 }
 
 func newDemoNotFoundCommand(group *demoResourceGroup, names []string) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "not-found <name>",
 		Short: "Demonstrate an actionable not-found error with shell completion of names",
 		Long: "Demonstrates the error contract: an unknown name fails with exit 1 and a message that names it and lists the\n" +
@@ -46,11 +47,7 @@ func newDemoNotFoundCommand(group *demoResourceGroup, names []string) *cobra.Com
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resources, err := group.get(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resource, err := resources.Status(cmd.Context(), args[0])
+			resource, err := group.resources.Status(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -62,10 +59,14 @@ func newDemoNotFoundCommand(group *demoResourceGroup, names []string) *cobra.Com
 			)
 		},
 	}
+	group.runtime.SetCommandPolicy(command, CommandPolicy{
+		Timeout: func(*cobra.Command) *time.Duration { return group.settings.Timeouts.Demo.NotFound },
+	})
+	return command
 }
 
 func newDemoSecretCredentialCommand(group *demoResourceGroup, names []string) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "secret-credential <name>",
 		Short: "Demonstrate a secret reference resolved at run time and never printed",
 		Long: "Demonstrates the secret contract: set demo.secret_credential.reference (or\n" +
@@ -74,11 +75,7 @@ func newDemoSecretCredentialCommand(group *demoResourceGroup, names []string) *c
 		Args:              validationArgs(cobra.ExactArgs(1)),
 		ValidArgsFunction: completeResourceNames(names),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resources, err := group.get(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resource, err := resources.Apply(cmd.Context(), args[0])
+			resource, err := group.resources.Apply(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -90,6 +87,10 @@ func newDemoSecretCredentialCommand(group *demoResourceGroup, names []string) *c
 			)
 		},
 	}
+	group.runtime.SetCommandPolicy(command, CommandPolicy{
+		Timeout: func(*cobra.Command) *time.Duration { return group.settings.Timeouts.Demo.SecretCredential },
+	})
+	return command
 }
 
 func newDemoCommand(group *demoResourceGroup, names []string) *cobra.Command {
@@ -114,11 +115,7 @@ func newDemoCommand(group *demoResourceGroup, names []string) *cobra.Command {
 			"length is fixed in the template; --timeout bounds it and Ctrl-C cancels it.",
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			resources, err := group.get(cmd.Context())
-			if err != nil {
-				return err
-			}
-			return resources.LongRunning(cmd.Context())
+			return group.resources.LongRunning(cmd.Context())
 		},
 	})
 	return demo
@@ -144,11 +141,7 @@ func newDemoFlakyDependencyCommand(group *demoResourceGroup) *cobra.Command {
 		),
 		Args: validationArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			resources, err := group.get(cmd.Context())
-			if err != nil {
-				return err
-			}
-			resource, err := resources.FlakyDependency(cmd.Context())
+			resource, err := group.resources.FlakyDependency(cmd.Context())
 			if err != nil {
 				return err
 			}
