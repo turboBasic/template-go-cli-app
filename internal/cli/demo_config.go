@@ -71,7 +71,13 @@ func demoDefaults() DemoConfig {
 func DemoApplicationSettings() config.ApplicationSettings {
 	return config.ApplicationSettings{
 		Defaults: demoDefaults(),
-		Validate: func(value any) error { return validateDemoConfig(value.(DemoConfig)) },
+		Validate: func(value any) error {
+			settings, ok := value.(DemoConfig)
+			if !ok {
+				return fmt.Errorf("expected demo settings, got %T", value)
+			}
+			return validateDemoConfig(settings)
+		},
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,105 @@ type lifecycleState struct {
 	operationTimeout  time.Duration
 }
 
+type commandPolicyState struct {
+	setupErr, cleanupErr error
+	blockSetup           bool
+	setupCalls           int
+	handlerCalls         int
+	cleanupCalls         int
+	cleanupContextErr    error
+	setupDeadline        time.Duration
+}
+
+func commandPolicyRegistration(state *commandPolicyState) CommandRegistration {
+	return CommandRegistration{
+		RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+			command := &cobra.Command{Use: "run", RunE: func(*cobra.Command, []string) error {
+				state.handlerCalls++
+				return nil
+			}}
+			runtime.SetCommandPolicy(command, CommandPolicy{
+				Setup: SetupPolicy{Declared: true, Run: func(cmd *cobra.Command, runtime *CommandRuntime) error {
+					state.setupCalls++
+					if runtime.Logger == nil || runtime.Progress == nil {
+						return errors.New("shared runtime is not initialized")
+					}
+					if deadline, ok := cmd.Context().Deadline(); ok {
+						state.setupDeadline = time.Until(deadline)
+					}
+					runtime.RegisterCleanup(func(ctx context.Context) error {
+						state.cleanupCalls++
+						state.cleanupContextErr = ctx.Err()
+						return state.cleanupErr
+					})
+					if state.blockSetup {
+						<-cmd.Context().Done()
+						return cmd.Context().Err()
+					}
+					return state.setupErr
+				}},
+				Timeout: func(*cobra.Command) *time.Duration {
+					timeout := 2 * time.Second
+					return &timeout
+				},
+			})
+			root.AddCommand(command)
+		},
+	}
+}
+
+func TestCommandPolicySetupRunsInsideOperationLifecycle(t *testing.T) {
+	setupConfigEnvironment(t)
+	setupErr, cleanupErr := errors.New("partial setup failed"), errors.New("cleanup failed")
+	for _, test := range []struct {
+		name             string
+		args             []string
+		setupErr         error
+		cleanupErr       error
+		blockSetup       bool
+		wantSetupErr     error
+		wantCleanupErr   error
+		wantSetupCalls   int
+		wantCleanupCalls int
+		wantHandlerCalls int
+	}{
+		{name: "success", args: []string{"run"}, wantSetupCalls: 1, wantCleanupCalls: 1, wantHandlerCalls: 1},
+		{name: "partial setup failure", args: []string{"run"}, setupErr: setupErr, cleanupErr: cleanupErr, wantSetupErr: setupErr, wantCleanupErr: cleanupErr, wantSetupCalls: 1, wantCleanupCalls: 1},
+		{name: "setup deadline", args: []string{"--timeout", "30ms", "run"}, blockSetup: true, wantSetupErr: context.DeadlineExceeded, wantSetupCalls: 1, wantCleanupCalls: 1},
+		{name: "help", args: []string{"--help"}},
+		{name: "completion", args: []string{"completion", "bash"}},
+		{name: "config inspection", args: []string{"config", "show"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state := &commandPolicyState{
+				setupErr: test.setupErr, cleanupErr: test.cleanupErr, blockSetup: test.blockSetup,
+			}
+			root := NewRootCommand(commandPolicyRegistration(state), BuildInfo{})
+			root.SetArgs(test.args)
+			root.SetErr(io.Discard)
+			err := Execute(context.Background(), root)
+			if test.wantSetupErr != nil && !errors.Is(err, test.wantSetupErr) {
+				t.Errorf("Execute() error = %v, want setup error %v", err, test.wantSetupErr)
+			}
+			if test.wantCleanupErr != nil && !errors.Is(err, test.wantCleanupErr) {
+				t.Errorf("Execute() error = %v, want cleanup error %v", err, test.wantCleanupErr)
+			}
+			if test.wantSetupErr == nil && test.wantCleanupErr == nil && err != nil {
+				t.Fatalf("Execute() error = %v, want nil", err)
+			}
+			if state.setupCalls != test.wantSetupCalls || state.cleanupCalls != test.wantCleanupCalls || state.handlerCalls != test.wantHandlerCalls {
+				t.Fatalf("setup/cleanup/handler calls = %d/%d/%d, want %d/%d/%d", state.setupCalls, state.cleanupCalls, state.handlerCalls, test.wantSetupCalls, test.wantCleanupCalls, test.wantHandlerCalls)
+			}
+			if state.cleanupContextErr != nil {
+				t.Fatalf("cleanup context error = %v, want live bounded context", state.cleanupContextErr)
+			}
+			if test.blockSetup && (state.setupDeadline <= 0 || state.setupDeadline > time.Second) {
+				t.Fatalf("setup deadline remaining = %s, want explicit 30ms override", state.setupDeadline)
+			}
+		})
+	}
+}
+
 type lifecycleReplacementService struct{ state *lifecycleState }
 
 func (s lifecycleReplacementService) run(ctx context.Context, runtime *CommandRuntime, name string) error {
@@ -67,45 +167,36 @@ func (s lifecycleReplacementService) run(ctx context.Context, runtime *CommandRu
 }
 
 type replacementServiceGroup struct {
-	runtime     *CommandRuntime
-	state       *lifecycleState
-	runID       uint64
-	initialized bool
-	service     lifecycleReplacementService
-	err         error
+	state   *lifecycleState
+	service lifecycleReplacementService
 }
 
-func (g *replacementServiceGroup) get(ctx context.Context) (lifecycleReplacementService, error) {
-	if g.runID != g.runtime.RunID {
-		g.runID, g.initialized, g.service, g.err = g.runtime.RunID, false, lifecycleReplacementService{}, nil
+func (g *replacementServiceGroup) setup(_ *cobra.Command, runtime *CommandRuntime) error {
+	g.state.setupCalls++
+	runtime.RegisterCleanup(func(ctx context.Context) error {
+		g.state.cleanupCalls++
+		g.state.cleanupContextErr = ctx.Err()
+		g.state.cleanupDeadline, _ = ctx.Deadline()
+		return g.state.cleanupErr
+	})
+	if g.state.setupErr != nil {
+		return fmt.Errorf("replacement setup: %w", g.state.setupErr)
 	}
-	if !g.initialized {
-		g.initialized = true
-		g.state.setupCalls++
-		cleanup := func(ctx context.Context) error {
-			g.state.cleanupCalls++
-			g.state.cleanupContextErr = ctx.Err()
-			g.state.cleanupDeadline, _ = ctx.Deadline()
-			return g.state.cleanupErr
-		}
-		if g.state.setupErr != nil {
-			g.runtime.RegisterCleanup(cleanup)
-			g.err = fmt.Errorf("replacement setup: %w", g.state.setupErr)
-		} else {
-			g.service = lifecycleReplacementService{state: g.state}
-			g.runtime.RegisterCleanup(cleanup)
-		}
-	}
-	return g.service, g.err
+	g.service = lifecycleReplacementService{state: g.state}
+	return nil
 }
 
 func replacementRegistration(state *lifecycleState) CommandRegistration {
 	timeout := 5 * time.Second
+	var settings replacementAppConfig
 	return CommandRegistration{
 		Settings: config.ApplicationSettings{
 			Defaults: replacementAppConfig{Worker: replacementWorkerConfig{Label: "default", Mode: "safe", Timeout: &timeout}},
 			Validate: func(value any) error {
-				settings := value.(replacementAppConfig)
+				settings, ok := value.(replacementAppConfig)
+				if !ok {
+					return fmt.Errorf("expected replacement settings, got %T", value)
+				}
 				if settings.Worker.Label == "" {
 					return errors.New("worker.label is required")
 				}
@@ -123,45 +214,45 @@ func replacementRegistration(state *lifecycleState) CommandRegistration {
 			value, _ := cmd.Flags().GetString("label")
 			return map[string]config.FlagValue{"worker-label": {Value: value, Changed: true, Source: "--label"}}
 		},
-		OperationTimeout: func(cmd *cobra.Command, value any) *time.Duration {
-			if cmd.Name() != "wait" && cmd.Name() != "cancel" {
-				return nil
+		PrepareApplication: func(value any) (any, error) {
+			loaded, ok := value.(replacementAppConfig)
+			if !ok {
+				return nil, fmt.Errorf("expected replacement settings, got %T", value)
 			}
-			return value.(replacementAppConfig).Worker.Timeout
+			settings = loaded
+			return loaded, nil
 		},
 		RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
-			group := &replacementServiceGroup{runtime: runtime, state: state}
+			group := &replacementServiceGroup{state: state}
 			for _, name := range []string{"first", "second", "failure", "wait", "cancel", "resolve"} {
 				commandName := name
 				command := &cobra.Command{Use: commandName, RunE: func(cmd *cobra.Command, _ []string) error {
-					service, err := group.get(cmd.Context())
-					if err != nil {
-						return err
-					}
-					return service.run(cmd.Context(), runtime, commandName)
+					return group.service.run(cmd.Context(), runtime, commandName)
 				}}
 				command.Flags().String("label", "", "replacement label")
+				policy := CommandPolicy{Setup: SetupPolicy{Declared: true, Run: group.setup}}
+				if commandName == "wait" || commandName == "cancel" {
+					policy.Timeout = func(*cobra.Command) *time.Duration { return settings.Worker.Timeout }
+				}
+				runtime.SetCommandPolicy(command, policy)
 				root.AddCommand(command)
 			}
 		},
 	}
 }
 
-func TestReplacementGroupSharesLazyDependenciesAcrossCommandsAndRuns(t *testing.T) {
+func TestReplacementCommandsUseFreshTrees(t *testing.T) {
 	setupConfigEnvironment(t)
-	state := &lifecycleState{}
-	root := NewRootCommand(replacementRegistration(state), BuildInfo{})
-	if state.setupCalls != 0 {
-		t.Fatalf("setup calls during registration = %d, want zero", state.setupCalls)
-	}
 	for _, name := range []string{"first", "second"} {
+		state := &lifecycleState{}
+		root := NewRootCommand(replacementRegistration(state), BuildInfo{})
 		root.SetArgs([]string{name})
 		if err := Execute(context.Background(), root); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if state.setupCalls != 2 || state.cleanupCalls != 2 {
-		t.Fatalf("setup/cleanup calls = %d/%d, want one of each per selected command run", state.setupCalls, state.cleanupCalls)
+		if state.setupCalls != 1 || state.cleanupCalls != 1 {
+			t.Fatalf("setup/cleanup calls for %s = %d/%d, want one each", name, state.setupCalls, state.cleanupCalls)
+		}
 	}
 }
 

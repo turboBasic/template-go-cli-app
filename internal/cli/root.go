@@ -24,17 +24,55 @@ type CommandRegistration struct {
 	RegisterCommands func(*cobra.Command, *CommandRuntime)
 	FlagValues       func(*cobra.Command) map[string]config.FlagValue
 	OperationTimeout func(*cobra.Command, any) *time.Duration
+	// PrepareApplication checks the loaded application value and returns the value closures use.
+	PrepareApplication func(any) (any, error)
+}
+
+// SetupPolicy declares whether a command supplies a setup policy. A zero value inherits its parent.
+type SetupPolicy struct {
+	Declared bool
+	Run      func(*cobra.Command, *CommandRuntime) error
+}
+
+// CommandPolicy associates setup and timeout behavior with a Cobra command.
+type CommandPolicy struct {
+	Setup   SetupPolicy
+	Timeout func(*cobra.Command) *time.Duration
 }
 
 // CommandRuntime exposes shared facilities to commands after a selected command initializes them.
 type CommandRuntime struct {
-	Configuration config.LoadResult
-	Renderer      output.Renderer
-	Logger        *slog.Logger
-	Progress      app.ProgressReporter
-	// RunID changes for each execution so lazy command dependencies can be reset after cleanup.
-	RunID           uint64
+	Configuration   config.LoadResult
+	Renderer        output.Renderer
+	Logger          *slog.Logger
+	Progress        app.ProgressReporter
+	policies        map[*cobra.Command]CommandPolicy
 	registerCleanup func(func(context.Context) error)
+}
+
+// SetCommandPolicy associates policy with the command object created during registration.
+func (r *CommandRuntime) SetCommandPolicy(command *cobra.Command, policy CommandPolicy) {
+	if r.policies == nil {
+		r.policies = make(map[*cobra.Command]CommandPolicy)
+	}
+	r.policies[command] = policy
+}
+
+func (r *CommandRuntime) selectedPolicy(command *cobra.Command) CommandPolicy {
+	var selected CommandPolicy
+	for current := command; current != nil; current = current.Parent() {
+		policy, ok := r.policies[current]
+		if !ok {
+			continue
+		}
+		if !selected.Setup.Declared && policy.Setup.Declared {
+			selected.Setup = policy.Setup
+		}
+		if selected.Timeout == nil && policy.Timeout != nil {
+			selected.Timeout = policy.Timeout
+		}
+	}
+	return selected
 }
 
 // RegisterCleanup adds command-owned dependency cleanup to the root lifecycle.
@@ -86,6 +124,7 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 	var cancelOperation context.CancelFunc
 	var stopProgress func()
 	var cleanupDependencies []func(context.Context) error
+	var executionStarted bool
 	cleanupTimeout := config.Defaults().Timeouts.Cleanup
 	var cleanupComplete bool
 	cleanup := func(parentContext context.Context) error {
@@ -124,16 +163,10 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		return errors.Join(dependencyErr, loggerErr)
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		if err := cleanup(cmd.Context()); err != nil {
-			return err
+		if executionStarted {
+			return errors.New("command tree already executed; create a new root command")
 		}
-		cleanupComplete = false
-		stopProgress = nil
-		runtime.Configuration = config.LoadResult{}
-		runtime.Renderer = output.Renderer{}
-		runtime.Logger = nil
-		runtime.Progress = nil
-		runtime.RunID++
+		executionStarted = true
 		if cmd.HasSubCommands() || isHelpOrCompletion(cmd) {
 			return nil
 		}
@@ -160,7 +193,15 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		if err != nil {
 			return app.Classify(app.ErrValidation, err)
 		}
+		if registration.PrepareApplication != nil {
+			application, err := registration.PrepareApplication(loaded.Application)
+			if err != nil {
+				return fmt.Errorf("prepare application settings: %w", err)
+			}
+			loaded.Application = application
+		}
 		runtime.Configuration = loaded
+		policy := runtime.selectedPolicy(cmd)
 		cleanupTimeout = loaded.Config.Timeouts.Cleanup
 		noColor := os.Getenv("NO_COLOR") != ""
 		runtime.Renderer = output.Renderer{
@@ -178,6 +219,8 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 				return app.Classify(app.ErrValidation, fmt.Errorf("invalid --timeout %s: must be positive", timeoutOverride))
 			}
 			configuredTimeout = &timeoutOverride
+		} else if policy.Timeout != nil {
+			configuredTimeout = policy.Timeout(cmd)
 		} else if registration.OperationTimeout != nil {
 			configuredTimeout = registration.OperationTimeout(cmd, loaded.Application)
 		}
@@ -216,6 +259,11 @@ func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Co
 		}
 		runtime.Logger = logResult.Logger
 		runtime.Progress = progressReporter
+		if policy.Setup.Declared && policy.Setup.Run != nil {
+			if err := policy.Setup.Run(cmd, runtime); err != nil {
+				return fmt.Errorf("setup selected command: %w", err)
+			}
+		}
 		return nil
 	}
 	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {

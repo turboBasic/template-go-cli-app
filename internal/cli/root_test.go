@@ -425,6 +425,31 @@ func TestExecuteCleansUpAfterNonDemoCommandFailure(t *testing.T) {
 	}
 }
 
+func TestDependencyCleanupRunsInReverseRegistrationOrder(t *testing.T) {
+	setupConfigEnvironment(t)
+	var got []string
+	root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+		root.AddCommand(&cobra.Command{Use: "ordinary", Run: func(*cobra.Command, []string) {
+			runtime.RegisterCleanup(func(context.Context) error {
+				got = append(got, "first")
+				return nil
+			})
+			runtime.RegisterCleanup(func(context.Context) error {
+				got = append(got, "second")
+				return nil
+			})
+		}})
+	}}, testBuildInfo())
+	root.SetArgs([]string{"ordinary"})
+	root.SetErr(io.Discard)
+	if err := Execute(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "second,first" {
+		t.Fatalf("cleanup order = %v, want [second first]", got)
+	}
+}
+
 func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 	setupConfigEnvironment(t)
 	cleanupCalls := 0
@@ -441,6 +466,29 @@ func TestExecuteCleansUpAfterCommandUsingRun(t *testing.T) {
 	}
 	if cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want one", cleanupCalls)
+	}
+}
+
+func TestRootCommandRejectsRepeatedExecution(t *testing.T) {
+	setupConfigEnvironment(t)
+	cleanupCalls := 0
+	root := NewRootCommand(CommandRegistration{RegisterCommands: func(root *cobra.Command, runtime *CommandRuntime) {
+		root.AddCommand(&cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {
+			runtime.RegisterCleanup(func(context.Context) error { cleanupCalls++; return nil })
+		}})
+	}}, testBuildInfo())
+	root.SetArgs([]string{"run"})
+	if err := Execute(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+
+	root.SetArgs([]string{"run"})
+	err := Execute(context.Background(), root)
+	if err == nil || !strings.Contains(err.Error(), "command tree already executed") {
+		t.Fatalf("second Execute() error = %v, want single-use error", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls after repeated execution = %d, want one", cleanupCalls)
 	}
 }
 
@@ -891,7 +939,7 @@ func TestConfigShowSkipsLoggingAndFactory(t *testing.T) {
 	}
 }
 
-func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
+func TestFreshTreesLoadIndependentConfigAndDependencies(t *testing.T) {
 	setupConfigEnvironment(t)
 	if err := os.Unsetenv("CLI_APP_LOG_LEVEL"); err != nil {
 		t.Fatal(err)
@@ -906,11 +954,11 @@ func TestRepeatedExecutionReloadsConfigAndDependencies(t *testing.T) {
 	}
 	reader := memory.NewResourceReader()
 	var configs []config.Config
-	command := newTestDemoRoot(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
-		configs = append(configs, effective)
-		return app.NewResourceService(reader, logger, progressReporter), nil, nil
-	}, testBuildInfo(), reader.Names())
 	for _, path := range []string{firstConfig, secondConfig} {
+		command := newTestDemoRoot(func(_ context.Context, effective config.Config, _ DemoConfig, logger *slog.Logger, progressReporter app.ProgressReporter) (*app.ResourceService, func(context.Context) error, error) {
+			configs = append(configs, effective)
+			return app.NewResourceService(reader, logger, progressReporter), nil, nil
+		}, testBuildInfo(), reader.Names())
 		command.SetArgs([]string{"--config", path, "demo", "structured-output"})
 		command.SetOut(&bytes.Buffer{})
 		if err := command.Execute(); err != nil {
