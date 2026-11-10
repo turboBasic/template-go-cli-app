@@ -91,7 +91,8 @@ type BuildInfo struct {
 
 // NewRootCommand builds one standalone execution's static command tree and shared runtime lifecycle.
 // Create a fresh registration and root for each execution. Application groups with children are
-// help-only; put application operations on leaf commands.
+// help-only; put application operations on leaf commands. Application commands must not define
+// persistent pre-run hooks; use setup policies instead.
 func NewRootCommand(registration CommandRegistration, build BuildInfo) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "cli-app",
@@ -304,6 +305,13 @@ func setApplicationGroupHelp(root *cobra.Command) error {
 	var groupErr error
 	var visit func(*cobra.Command)
 	visit = func(command *cobra.Command) {
+		if command.PersistentPreRun != nil || command.PersistentPreRunE != nil {
+			groupErr = errors.Join(groupErr, fmt.Errorf(
+				"command %q must not define persistent pre-run hooks; use a setup policy", command.CommandPath(),
+			))
+			command.PersistentPreRun = nil
+			command.PersistentPreRunE = nil
+		}
 		children := command.Commands()
 		if len(children) > 0 {
 			if command.Run != nil || command.RunE != nil {
