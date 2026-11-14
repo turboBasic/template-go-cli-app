@@ -9,7 +9,7 @@ cz = "command cz"
 cosign = "3.1.4"
 go = "1.27.3"
 golangci-lint = "2.15.0"
-goreleaser = "2.20.0"
+goreleaser = "2.20.1"
 jactionlint = { version = "v2.5.0", workflow = "release.yaml" }
 just = "1.59.0"
 "npm:cspell-cli" = "10.4.0"
